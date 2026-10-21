@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import { estimateBroadcastCost, parseBroadcastRate } from '@/lib/broadcast-cost';
+import { estimateBroadcastCost } from '@/lib/broadcast-cost';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,12 +44,10 @@ export function Step4ScheduleSend({
   progress,
 }: Step4Props) {
   const t = useTranslations('Broadcasts.wizard');
-  const { accountId, canEditSettings } = useAuth();
+  const { accountId } = useAuth();
   const [ratePkr, setRatePkr] = useState<number | null>(null);
-  const [rateInput, setRateInput] = useState('');
   const [rateError, setRateError] = useState<string | null>(null);
   const [loadingRate, setLoadingRate] = useState(true);
-  const [savingRate, setSavingRate] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
@@ -86,7 +84,6 @@ export function Step4ScheduleSend({
         const value = data?.broadcast_rate_pkr;
         const rate = value === null || value === undefined ? null : Number(value);
         setRatePkr(rate);
-        setRateInput(rate === null ? '' : String(rate));
         setRateError(null);
       }
       setLoadingRate(false);
@@ -95,31 +92,10 @@ export function Step4ScheduleSend({
     return () => { active = false; };
   }, [accountId]);
 
-  async function saveRate() {
-    if (!accountId || !canEditSettings) return;
-    const parsed = parseBroadcastRate(rateInput);
-    if (parsed === null) {
-      setRateError('Enter a valid PKR rate (0 to 99999, up to 4 decimals).');
-      return;
-    }
-    setSavingRate(true);
-    const { error } = await createClient()
-      .from('accounts')
-      .update({ broadcast_rate_pkr: parsed })
-      .eq('id', accountId);
-    if (error) setRateError(`Could not save rate: ${error.message}`);
-    else {
-      setRatePkr(parsed);
-      setRateError(null);
-    }
-    setSavingRate(false);
-  }
-
   const costEstimate = loadingReach || loadingRate
     ? null
     : estimateBroadcastCost(estimatedReach, ratePkr);
-  const costIsConfigured = ratePkr !== null && !loadingRate && !rateError &&
-    rateInput.trim() === String(ratePkr);
+  const costIsConfigured = ratePkr !== null && !loadingRate && !rateError;
 
   const audienceLabel =
     audience.type === 'all'
@@ -190,25 +166,12 @@ export function Step4ScheduleSend({
             `PKR ${costEstimate.toLocaleString('en-PK', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
         </p>
         <p className="text-xs text-muted-foreground">
-          Indicative cost at a college-configured per-message rate. Actual Meta charges
+          Indicative cost at a platform-configured per-message rate. Actual Meta charges
           depend on recipient country, template category and delivered messages.
         </p>
-        {canEditSettings && (
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-muted-foreground">
-              PKR per message
-              <Input aria-label="PKR per message" type="number" min="0" max="99999"
-                step="0.0001" value={rateInput} onChange={(e) => setRateInput(e.target.value)} />
-            </label>
-            <Button type="button" variant="outline" disabled={savingRate}
-              onClick={() => void saveRate()}>
-              {savingRate ? 'Saving...' : 'Save rate'}
-            </Button>
-          </div>
-        )}
         {rateError && <p role="alert" className="text-sm text-destructive">{rateError}</p>}
         {!costIsConfigured && <p className="text-xs text-destructive">
-          Configure a rate before sending so the required cost estimate is visible.
+          The platform administrator must configure a rate before sending.
         </p>}
       </div>
 
