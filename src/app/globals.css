@@ -159,7 +159,23 @@ html[data-mode="light"] {
 
 /* ---- ACCENT: primary color ---- */
 
+/* Study in Pakistan brand (studyinpakistan.info) — the default theme.
+   #007b45 = deep "SIP" green, #3aa758 = logo ring green. */
 :root,
+html[data-theme="sip"] {
+  --primary: oklch(0.512 0.126 155);
+  --primary-foreground: oklch(0.985 0 0);
+  --primary-hover: oklch(0.647 0.152 149);
+  --primary-soft: oklch(0.512 0.126 155 / 0.12);
+  --primary-soft-2: oklch(0.512 0.126 155 / 0.22);
+  --ring: oklch(0.647 0.152 149);
+  --chart-1: oklch(0.512 0.126 155);
+  --chart-2: oklch(0.647 0.152 149);
+  --sidebar-primary: oklch(0.512 0.126 155);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.647 0.152 149);
+}
+
 html[data-theme="violet"] {
   --primary: oklch(0.526 0.247 293);
   --primary-foreground: oklch(0.985 0 0);
