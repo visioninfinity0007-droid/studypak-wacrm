@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
 import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
+import { estimateBroadcastCost } from '@/lib/broadcast-cost';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +44,10 @@ export function Step4ScheduleSend({
   progress,
 }: Step4Props) {
   const t = useTranslations('Broadcasts.wizard');
+  const { accountId } = useAuth();
+  const [ratePkr, setRatePkr] = useState<number | null>(null);
+  const [rateError, setRateError] = useState<string | null>(null);
+  const [loadingRate, setLoadingRate] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
@@ -60,6 +66,36 @@ export function Step4ScheduleSend({
 
     calculateReach();
   }, [audience]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadRate() {
+      if (!accountId) return;
+      setLoadingRate(true);
+      const { data, error } = await createClient()
+        .from('accounts')
+        .select('broadcast_rate_pkr')
+        .eq('id', accountId)
+        .single();
+      if (!active) return;
+      if (error) {
+        setRateError('Unable to load cost configuration; verify migration 060.');
+      } else {
+        const value = data?.broadcast_rate_pkr;
+        const rate = value === null || value === undefined ? null : Number(value);
+        setRatePkr(rate);
+        setRateError(null);
+      }
+      setLoadingRate(false);
+    }
+    void loadRate();
+    return () => { active = false; };
+  }, [accountId]);
+
+  const costEstimate = loadingReach || loadingRate
+    ? null
+    : estimateBroadcastCost(estimatedReach, ratePkr);
+  const costIsConfigured = ratePkr !== null && !loadingRate && !rateError;
 
   const audienceLabel =
     audience.type === 'all'
@@ -122,6 +158,23 @@ export function Step4ScheduleSend({
         </div>
       </div>
 
+      {/* Indicative pricing: a configurable rate, not Meta's live rate card. */}
+      <div className="space-y-2 rounded-xl border border-border p-4">
+        <p className="text-sm font-medium text-foreground">Estimated broadcast cost (PKR)</p>
+        <p className="text-xl font-semibold text-foreground">
+          {costEstimate === null ? 'Not configured' :
+            `PKR ${costEstimate.toLocaleString('en-PK', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Indicative cost at a platform-configured per-message rate. Actual Meta charges
+          depend on recipient country, template category and delivered messages.
+        </p>
+        {rateError && <p role="alert" className="text-sm text-destructive">{rateError}</p>}
+        {!costIsConfigured && <p className="text-xs text-destructive">
+          The platform administrator must configure a rate before sending.
+        </p>}
+      </div>
+
       {/* Processing overlay */}
       {isProcessing && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -169,7 +222,7 @@ export function Step4ScheduleSend({
           <DialogTrigger
             render={
               <Button
-                disabled={!name.trim() || isProcessing}
+                disabled={!name.trim() || isProcessing || !costIsConfigured}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               />
             }
@@ -199,7 +252,9 @@ export function Step4ScheduleSend({
                 {t('cancel')}
               </Button>
               <Button
+                disabled={!costIsConfigured}
                 onClick={() => {
+                  if (!costIsConfigured) return;
                   setShowConfirm(false);
                   onSend();
                 }}
