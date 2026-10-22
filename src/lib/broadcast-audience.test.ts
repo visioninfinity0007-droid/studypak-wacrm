@@ -115,6 +115,8 @@ function contacts(n: number): Row[] {
   return Array.from({ length: n }, (_, i) => ({
     id: uuid('c', i),
     phone: `+1555${String(i).padStart(7, '0')}`,
+    // Broadcastable by default; the consent tests below override it.
+    consent_status: 'granted',
   }));
 }
 
@@ -297,7 +299,7 @@ describe('resolveAudienceContacts', () => {
 
     await expect(
       resolveAudienceContacts(db, { type: 'tags', tagIds: ['t'] }, noCsv),
-    ).rejects.toThrow('Failed to fetch contact tags: denied');
+    ).rejects.toThrow(/Failed to fetch (contact tags|exclusions): denied/);
   });
 });
 
@@ -343,6 +345,7 @@ describe('countAudience', () => {
   it('counts a custom-field audience', async () => {
     const all = contacts(1500);
     const { db } = cappedPostgrest({
+      contacts: all,
       contact_custom_values: all.map((c, i) => ({
         id: uuid('v', i),
         contact_id: c.id,
@@ -378,5 +381,39 @@ describe('countAudience', () => {
       }),
     ).toBeNull();
     expect(await countAudience(db, { type: 'csv' })).toBeNull();
+  });
+});
+
+describe('consent and exclusions (contract requirement 3)', () => {
+  it('drops contacts without recorded consent from every audience type', async () => {
+    const all = contacts(4);
+    all[1].consent_status = 'unknown';
+    all[2].consent_status = 'revoked';
+    const { db } = cappedPostgrest({ contacts: all, contact_tags: tagRows(all, 'tag-a', 't') });
+    const everyone = await resolveAudienceContacts(db, { type: 'all' }, noCsv);
+    expect(everyone.map((c) => c.id)).toEqual([all[0].id, all[3].id]);
+    const tagged = await resolveAudienceContacts(db, { type: 'tags', tagIds: ['tag-a'] }, noCsv);
+    expect(tagged.map((c) => c.id).sort()).toEqual([all[0].id, all[3].id].sort());
+    const csv = await resolveAudienceContacts(db, { type: 'csv', csvContacts: [{ phone: '+1' }] },
+      async () => all as unknown as Contact[]);
+    expect(csv.map((c) => c.id)).toEqual([all[0].id, all[3].id]);
+  });
+
+  it('drops a consented contact whose number is on the exclusion list', async () => {
+    const all = contacts(3);
+    const { db } = cappedPostgrest({
+      contacts: all,
+      contact_exclusions: [{ id: 'e1', phone_normalized: String(all[2].phone).replace(/\D/g, '') }],
+    });
+    const result = await resolveAudienceContacts(db, { type: 'all' }, noCsv);
+    expect(result.map((c) => c.id)).toEqual([all[0].id, all[1].id]);
+  });
+
+  it('counts only consented contacts', async () => {
+    const all = contacts(10);
+    for (const c of all.slice(0, 4)) c.consent_status = 'unknown';
+    const { db } = cappedPostgrest({ contacts: all, contact_tags: tagRows(all, 'tag-a', 't') });
+    expect(await countAudience(db, { type: 'all' })).toBe(6);
+    expect(await countAudience(db, { type: 'tags', tagIds: ['tag-a'] })).toBe(6);
   });
 });

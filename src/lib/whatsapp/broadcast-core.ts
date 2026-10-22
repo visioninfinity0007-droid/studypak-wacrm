@@ -28,6 +28,7 @@ import {
 import { resolveTemplateRow } from '@/lib/whatsapp/template-body';
 import type { MessageTemplate } from '@/types';
 import { findOrCreateContact } from '@/lib/api/v1/contacts';
+import { loadBroadcastEligibility } from '@/lib/contacts/consent-server';
 
 /** Thrown by createBroadcast on a caller-visible failure; route maps it. */
 export class BroadcastError extends Error {
@@ -63,6 +64,8 @@ interface PlannedRecipient {
 
 export interface BroadcastPlan {
   broadcastId: string;
+  /** Owning account — consent/exclusions are checked against it. */
+  accountId: string;
   templateName: string;
   templateLanguage: string;
   phoneNumberId: string;
@@ -235,6 +238,7 @@ export async function createBroadcast(
 
   return {
     broadcastId,
+    accountId,
     templateName,
     templateLanguage: resolvedTemplate.language,
     phoneNumberId: config.phone_number_id,
@@ -262,7 +266,32 @@ export async function deliverBroadcast(
   db: SupabaseClient,
   plan: BroadcastPlan
 ): Promise<void> {
+  // Contract requirement 3: re-checked at send time (not just when the
+  // broadcast was created) so a STOP reply received mid-campaign takes
+  // effect for the recipients not yet sent. Throws — and sends nothing —
+  // if the lookup fails: fail closed, the rows stay pending for resume.
+  const eligibility = await loadBroadcastEligibility(
+    db,
+    plan.accountId,
+    plan.planned.map((r) => r.phone),
+  );
+
   for (const recipient of plan.planned) {
+    const allowed = eligibility(recipient.phone);
+    if (!allowed.eligible) {
+      await db
+        .from('broadcast_recipients')
+        .update({
+          status: 'failed',
+          error_message:
+            allowed.reason === 'excluded'
+              ? 'Not sent: number is on the opt-out / exclusion list'
+              : 'Not sent: no recorded consent for this contact',
+        })
+        .eq('id', recipient.recipientRowId);
+      continue;
+    }
+
     const variants = phoneVariants(recipient.phone);
     let sentMessageId: string | null = null;
     let lastError: string | null = null;

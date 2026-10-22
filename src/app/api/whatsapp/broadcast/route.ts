@@ -16,6 +16,7 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit'
 import { getT } from '@/lib/i18n/translate'
+import { loadBroadcastEligibility } from '@/lib/contacts/consent-server'
 
 const t = getT('Api')
 
@@ -167,8 +168,31 @@ export async function POST(request: Request) {
     let sentCount = 0
     let failedCount = 0
 
+    // Contract requirement 3: never broadcast to an excluded number or a
+    // contact without recorded consent — enforced here, not only in the
+    // browser audience, because this route takes raw phone numbers.
+    const eligibility = await loadBroadcastEligibility(
+      supabase,
+      accountId,
+      recipients.map((r) => sanitizePhoneForMeta(r.phone)),
+    )
+
     for (const recipient of recipients) {
       const sanitized = sanitizePhoneForMeta(recipient.phone)
+
+      const allowed = eligibility(sanitized)
+      if (!allowed.eligible) {
+        results.push({
+          phone: recipient.phone,
+          status: 'failed',
+          error:
+            allowed.reason === 'excluded'
+              ? t('broadcast.recipientExcluded')
+              : t('broadcast.recipientNoConsent'),
+        })
+        failedCount++
+        continue
+      }
 
       if (!isValidE164(sanitized)) {
         results.push({

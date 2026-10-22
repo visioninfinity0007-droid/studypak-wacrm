@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { fetchAllInChunks, fetchAllPages } from '@/lib/supabase/paged-query';
+import { broadcastEligibility } from '@/lib/contacts/consent';
 import type { Contact } from '@/types';
 
 export type CustomFieldOperator = 'is' | 'is_not' | 'contains';
@@ -122,7 +123,37 @@ async function fetchAudienceContactIds(
   return null;
 }
 
+/**
+ * Digits-only numbers on this account's do-not-message list (contract
+ * requirement 3). RLS scopes the read to the caller's account.
+ */
+export function fetchExclusionKeys(db: SupabaseClient): Promise<Set<string>> {
+  return withContext('exclusions', async () => {
+    const rows = await fetchAllPages<{ phone_normalized: string }>((from, to) =>
+      db.from('contact_exclusions').select('phone_normalized').order('id').range(from, to),
+    );
+    return new Set(rows.map((row) => row.phone_normalized));
+  });
+}
+
+/**
+ * Who a broadcast may actually go to: recorded consent and not on the
+ * exclusion list. Applied to every audience type, including CSV.
+ */
 export async function resolveAudienceContacts(
+  db: SupabaseClient,
+  audience: AudienceConfig,
+  resolveCsv: (rows: CsvAudienceRow[]) => Promise<Contact[]>,
+): Promise<Contact[]> {
+  const targeted = await resolveTargetedContacts(db, audience, resolveCsv);
+  if (targeted.length === 0) return [];
+  const exclusionKeys = await fetchExclusionKeys(db);
+  return targeted.filter(
+    (contact) => broadcastEligibility(contact, exclusionKeys).eligible,
+  );
+}
+
+async function resolveTargetedContacts(
   db: SupabaseClient,
   audience: AudienceConfig,
   resolveCsv: (rows: CsvAudienceRow[]) => Promise<Contact[]>,
@@ -155,10 +186,14 @@ export async function countAudience(
       : null;
   }
 
+  // Counts only contacts with recorded consent — the ones a broadcast
+  // will actually reach (an excluded number can never be 'granted', the
+  // database enforces that — migration 063).
   if (audience.type === 'all') {
     const { count, error } = await db
       .from('contacts')
-      .select('id', { count: 'exact', head: true });
+      .select('id', { count: 'exact', head: true })
+      .eq('consent_status', 'granted');
     if (error) throw new Error(`Failed to count contacts: ${error.message}`);
     const total = count ?? 0;
     const excluded = await fetchExcludedIds(db, audience);
@@ -172,7 +207,18 @@ export async function countAudience(
   const ids = await fetchAudienceContactIds(db, audience);
   if (!ids) return null;
   const excluded = await fetchExcludedIds(db, audience);
-  let size = 0;
-  for (const id of ids) if (!excluded.has(id)) size++;
-  return size;
+  const wanted = [...ids].filter((id) => !excluded.has(id));
+  if (wanted.length === 0) return 0;
+  const granted = await withContext('contact consent', () =>
+    fetchAllInChunks<{ id: string }, string>(wanted, (slice, from, to) =>
+      db
+        .from('contacts')
+        .select('id')
+        .in('id', slice)
+        .eq('consent_status', 'granted')
+        .order('id')
+        .range(from, to),
+    ),
+  );
+  return granted.length;
 }

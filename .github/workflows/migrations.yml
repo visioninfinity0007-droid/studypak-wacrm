@@ -75,3 +75,8 @@ jobs:
       # and platform-managed triggers as the `authenticated` role.
       - name: Verify two-college tenant isolation
         run: supabase db query --local --file supabase/ci/verify-tenant-isolation.sql
+
+      # Contract requirement 3: exclusions revoke consent, an excluded
+      # number can't be re-consented, and exclusions are per college.
+      - name: Verify consent and exclusions
+        run: supabase db query --local --file supabase/ci/verify-consent-exclusions.sql
