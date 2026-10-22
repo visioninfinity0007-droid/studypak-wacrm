@@ -32,6 +32,7 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
+import { handleOptKeyword } from '@/lib/contacts/opt-keywords'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -780,6 +781,20 @@ async function processMessage(
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id)
 
+  // STOP / START (contract requirement 3): maintain the exclusion list
+  // and confirm. An opt keyword is answered here and nowhere else — it
+  // counts as consumed, so no flow, automation or AI reply also fires.
+  const optHandled = interactiveReplyId
+    ? false
+    : await handleOptKeyword(supabaseAdmin(), {
+        accountId,
+        userId: configOwnerUserId,
+        contactId: contactRecord.id,
+        conversationId: conversation.id,
+        contactPhone: contactRecord.phone ?? '',
+        text: contentText ?? message.text?.body,
+      })
+
   // ============================================================
   // Flow runner dispatch.
   //
@@ -799,7 +814,7 @@ async function processMessage(
   // no active flows take the runner's early-exit "no_match" path
   // basically for free (one indexed SELECT for the active run).
   // ============================================================
-  const flowResult = await dispatchInboundToFlows({
+  const flowResult = optHandled ? null : await dispatchInboundToFlows({
     accountId,
     userId: configOwnerUserId,
     contactId: contactRecord.id,
@@ -819,7 +834,7 @@ async function processMessage(
           },
     isFirstInboundMessage,
   })
-  const flowConsumed = flowResult.consumed
+  const flowConsumed = optHandled || !!flowResult?.consumed
 
   // Fire any automations that react to this webhook event. All dispatches
   // run here (not earlier) so the contact, conversation, and inbound

@@ -553,7 +553,8 @@
         "email": "이메일",
         "company": "회사",
         "tags": "태그",
-        "createdAt": "생성일"
+        "createdAt": "생성일",
+        "consent": "Consent"
       },
       "loading": "연락처를 불러오는 중...",
       "noContactsMatch": "필터와 일치하는 연락처가 없습니다.",
@@ -577,7 +578,14 @@
       "toastBulkDeleted": "연락처 {count}개가 삭제되었습니다",
       "filterByTag": "{name}(으)로 필터링",
       "removeTagFilter": "{name} 필터 제거",
-      "selectContact": "{name} 선택"
+      "selectContact": "{name} 선택",
+      "optOutListBtn": "Opt-out list",
+      "recordConsentBtn": "Record consent",
+      "consentStatus": {
+        "unknown": "Not recorded",
+        "granted": "Consented",
+        "revoked": "Opted out"
+      }
     },
     "form": {
       "addTitle": "연락처 추가",
@@ -730,7 +738,23 @@
       "toastError": "가져오기 실패",
       "notAuthenticated": "인증되지 않았습니다",
       "notLinkedToAccount": "프로필이 계정에 연결되어 있지 않습니다.",
-      "toastTagsSkippedMore": " (외 {count}개)"
+      "toastTagsSkippedMore": " (외 {count}개)",
+      "toastXlsxUnreadable": "Couldn't read this Excel file. Save it as .xlsx (or export as CSV) and try again.",
+      "consentSourceRequired": "Enter where the consent came from (e.g. admission form) or untick the consent box.",
+      "toastConsentUpdateFailed": "Contacts were imported, but consent could not be recorded on some existing contacts.",
+      "resultExcluded": "{count} on the opt-out list (not imported)",
+      "resultConsent": "{count} with consent recorded",
+      "resultNoConsentHint": "{count} imported without recorded consent — they won't receive broadcasts until consent is recorded (Contacts → Record consent).",
+      "defaultCountryLabel": "Numbers without a country code are from",
+      "defaultCountryPK": "Pakistan (+92)",
+      "defaultCountryNone": "— require +country code —",
+      "consentAttest": "These people agreed to receive WhatsApp messages from us",
+      "consentSourceLabel": "Where consent came from",
+      "consentSourcePlaceholder": "Source, e.g. Admission inquiry form 2026",
+      "consentEvidenceLabel": "Evidence (optional)",
+      "consentEvidencePlaceholder": "Evidence, e.g. form file / reference",
+      "consentHint": "Only contacts with recorded consent receive broadcasts. Numbers on the opt-out list are never imported.",
+      "consentColumnHint": "This file has a consent column: rows marked yes/no use that value; blank rows follow the box above."
     },
     "customFields": {
       "title": "커스텀 필드",
@@ -749,6 +773,41 @@
       "toastRenameFailed": "필드 이름을 변경할 수 없습니다.",
       "toastDeleteFailed": "필드를 삭제할 수 없습니다.",
       "toastDeleted": "\"{name}\"을(를) 삭제했습니다."
+    },
+    "consent": {
+      "title": "Record consent",
+      "desc": "Record that these contacts agreed to receive WhatsApp broadcasts, and where that permission came from. Only contacts with recorded consent receive broadcasts.",
+      "scopeSelected": "{count} selected contacts",
+      "scopeAllUnknown": "All {count} contacts without recorded consent",
+      "scopeAllUnknownLoading": "All contacts without recorded consent",
+      "sourceLabel": "Where consent came from",
+      "sourcePlaceholder": "e.g. Admission inquiry form 2026",
+      "evidenceLabel": "Evidence (optional)",
+      "evidencePlaceholder": "e.g. signed form reference, file name",
+      "revokedNote": "Contacts who opted out (replied STOP or are on the opt-out list) are not changed.",
+      "cancel": "Cancel",
+      "record": "Record consent",
+      "toastRecorded": "Consent recorded for {count} contacts",
+      "toastFailed": "Could not record consent"
+    },
+    "exclusions": {
+      "title": "Opt-out list",
+      "desc": "These numbers never receive broadcasts. Students who reply STOP are added automatically; replying START removes them.",
+      "phonePlaceholder": "Number to exclude, e.g. 0310 5478805",
+      "add": "Exclude",
+      "added": "Number excluded",
+      "addFailed": "Could not exclude the number",
+      "invalidPhone": "Enter a valid phone number",
+      "empty": "No numbers on the opt-out list.",
+      "reason": {
+        "opt_out": "Replied STOP",
+        "manual": "Excluded by staff"
+      },
+      "remove": "Remove from list",
+      "removeConfirm": "Remove {phone} from the opt-out list? They will need to give consent again before receiving broadcasts.",
+      "removed": "Removed from the opt-out list",
+      "removeFailed": "Could not remove — only admins can remove numbers from the opt-out list",
+      "loadFailed": "Could not load the opt-out list"
     }
   },
   "Pipelines": {
@@ -2866,7 +2925,9 @@
       "recipientsRequired": "`recipients`(권장) 또는 `phone_numbers`를 제공하세요 — 비어 있지 않은 배열이어야 합니다",
       "templateNameRequired": "템플릿 이름은 필수입니다",
       "templateMalformed": "로컬 템플릿 데이터가 손상되었습니다 — 브로드캐스트 전에 설정에서 \"Meta에서 동기화\"를 실행해 복구하세요.",
-      "invalidPhoneFormat": "전화번호 형식이 올바르지 않습니다"
+      "invalidPhoneFormat": "전화번호 형식이 올바르지 않습니다",
+      "recipientExcluded": "Not sent: number is on the opt-out list",
+      "recipientNoConsent": "Not sent: no recorded consent for this contact"
     },
     "whatsappConfig": {
       "fetchFailed": "설정을 가져오지 못했습니다",

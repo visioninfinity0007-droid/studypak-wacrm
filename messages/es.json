@@ -553,7 +553,8 @@
         "email": "Correo",
         "company": "Empresa",
         "tags": "Etiquetas",
-        "createdAt": "Creado"
+        "createdAt": "Creado",
+        "consent": "Consent"
       },
       "loading": "Cargando contactos...",
       "noContactsMatch": "Ningún contacto coincide con tus filtros.",
@@ -577,7 +578,14 @@
       "toastBulkDeleted": "{count} contactos eliminados",
       "filterByTag": "Filtrar por {name}",
       "removeTagFilter": "Quitar el filtro {name}",
-      "selectContact": "Seleccionar {name}"
+      "selectContact": "Seleccionar {name}",
+      "optOutListBtn": "Opt-out list",
+      "recordConsentBtn": "Record consent",
+      "consentStatus": {
+        "unknown": "Not recorded",
+        "granted": "Consented",
+        "revoked": "Opted out"
+      }
     },
     "form": {
       "addTitle": "Agregar contacto",
@@ -730,7 +738,23 @@
       "toastError": "Error en la importación",
       "notAuthenticated": "No autenticado",
       "notLinkedToAccount": "Tu perfil no está vinculado a una cuenta.",
-      "toastTagsSkippedMore": " (+{count} más)"
+      "toastTagsSkippedMore": " (+{count} más)",
+      "toastXlsxUnreadable": "Couldn't read this Excel file. Save it as .xlsx (or export as CSV) and try again.",
+      "consentSourceRequired": "Enter where the consent came from (e.g. admission form) or untick the consent box.",
+      "toastConsentUpdateFailed": "Contacts were imported, but consent could not be recorded on some existing contacts.",
+      "resultExcluded": "{count} on the opt-out list (not imported)",
+      "resultConsent": "{count} with consent recorded",
+      "resultNoConsentHint": "{count} imported without recorded consent — they won't receive broadcasts until consent is recorded (Contacts → Record consent).",
+      "defaultCountryLabel": "Numbers without a country code are from",
+      "defaultCountryPK": "Pakistan (+92)",
+      "defaultCountryNone": "— require +country code —",
+      "consentAttest": "These people agreed to receive WhatsApp messages from us",
+      "consentSourceLabel": "Where consent came from",
+      "consentSourcePlaceholder": "Source, e.g. Admission inquiry form 2026",
+      "consentEvidenceLabel": "Evidence (optional)",
+      "consentEvidencePlaceholder": "Evidence, e.g. form file / reference",
+      "consentHint": "Only contacts with recorded consent receive broadcasts. Numbers on the opt-out list are never imported.",
+      "consentColumnHint": "This file has a consent column: rows marked yes/no use that value; blank rows follow the box above."
     },
     "customFields": {
       "title": "Campos personalizados",
@@ -749,6 +773,41 @@
       "toastRenameFailed": "No se pudo renombrar el campo.",
       "toastDeleteFailed": "No se pudo eliminar el campo.",
       "toastDeleted": "\"{name}\" eliminado."
+    },
+    "consent": {
+      "title": "Record consent",
+      "desc": "Record that these contacts agreed to receive WhatsApp broadcasts, and where that permission came from. Only contacts with recorded consent receive broadcasts.",
+      "scopeSelected": "{count} selected contacts",
+      "scopeAllUnknown": "All {count} contacts without recorded consent",
+      "scopeAllUnknownLoading": "All contacts without recorded consent",
+      "sourceLabel": "Where consent came from",
+      "sourcePlaceholder": "e.g. Admission inquiry form 2026",
+      "evidenceLabel": "Evidence (optional)",
+      "evidencePlaceholder": "e.g. signed form reference, file name",
+      "revokedNote": "Contacts who opted out (replied STOP or are on the opt-out list) are not changed.",
+      "cancel": "Cancel",
+      "record": "Record consent",
+      "toastRecorded": "Consent recorded for {count} contacts",
+      "toastFailed": "Could not record consent"
+    },
+    "exclusions": {
+      "title": "Opt-out list",
+      "desc": "These numbers never receive broadcasts. Students who reply STOP are added automatically; replying START removes them.",
+      "phonePlaceholder": "Number to exclude, e.g. 0310 5478805",
+      "add": "Exclude",
+      "added": "Number excluded",
+      "addFailed": "Could not exclude the number",
+      "invalidPhone": "Enter a valid phone number",
+      "empty": "No numbers on the opt-out list.",
+      "reason": {
+        "opt_out": "Replied STOP",
+        "manual": "Excluded by staff"
+      },
+      "remove": "Remove from list",
+      "removeConfirm": "Remove {phone} from the opt-out list? They will need to give consent again before receiving broadcasts.",
+      "removed": "Removed from the opt-out list",
+      "removeFailed": "Could not remove — only admins can remove numbers from the opt-out list",
+      "loadFailed": "Could not load the opt-out list"
     }
   },
   "Pipelines": {
@@ -2866,7 +2925,9 @@
       "recipientsRequired": "Proporciona `recipients` (preferido) o `phone_numbers`; debe ser una lista no vacía",
       "templateNameRequired": "El nombre de la plantilla es obligatorio",
       "templateMalformed": "El registro local de la plantilla está dañado: usa \"Sincronizar desde Meta\" en Configuración para repararlo antes de enviar la difusión.",
-      "invalidPhoneFormat": "Formato de número de teléfono no válido"
+      "invalidPhoneFormat": "Formato de número de teléfono no válido",
+      "recipientExcluded": "Not sent: number is on the opt-out list",
+      "recipientNoConsent": "Not sent: no recorded consent for this contact"
     },
     "whatsappConfig": {
       "fetchFailed": "Error al obtener la configuración",

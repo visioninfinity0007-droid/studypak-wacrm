@@ -10,8 +10,13 @@ import {
 } from '@/lib/contacts/dedupe';
 import {
   parseContactCsv,
+  parseContactSheet,
+  type ParseContactCsvResult,
   type ParsedContactRow,
 } from '@/lib/contacts/parse-contact-csv';
+import { applyDefaultCountry, DEFAULT_COUNTRIES } from '@/lib/contacts/phone-default-country';
+import { exclusionKey } from '@/lib/contacts/consent';
+import { parseInternationalPhone } from '@/lib/whatsapp/phone-utils';
 import {
   assignImportedContactTags,
   resolveImportTagIds,
@@ -139,6 +144,13 @@ export function ImportModal({
     new Map()
   );
   const [importing, setImporting] = useState(false);
+  // Contract requirement 3: explicit default country for national-format
+  // numbers, and consent attestation for the whole file.
+  const [defaultCountry, setDefaultCountry] = useState<'PK' | 'none'>('PK');
+  const [consentAttested, setConsentAttested] = useState(false);
+  const [consentSource, setConsentSource] = useState('');
+  const [consentEvidence, setConsentEvidence] = useState('');
+  const [hasConsentColumn, setHasConsentColumn] = useState(false);
   const [result, setResult] = useState<{
     imported: number;
     skipped: number;
@@ -146,11 +158,18 @@ export function ImportModal({
     failed: number;
     failedDetails: { phone: string; name?: string; reason: string }[];
     tagsAssigned: number;
+    excluded: number;
+    consentGranted: number;
+    consentRecordedExisting: number;
   } | null>(null);
 
   function reset() {
     setFile(null);
     setParsedRows([]);
+    setHasConsentColumn(false);
+    setConsentAttested(false);
+    setConsentSource('');
+    setConsentEvidence('');
     setHasTagsColumn(false);
     setHasCompanyColumn(false);
     setTagColorByKey(new Map());
@@ -170,12 +189,26 @@ export function ImportModal({
     setFile(selected);
     setResult(null);
 
-    const text = await selected.text();
+    let parsed: ParseContactCsvResult;
+    if (/\.xlsx$/i.test(selected.name)) {
+      try {
+        // Loaded on demand — only importers of Excel files pay for it.
+        const { readSheet } = await import('read-excel-file/universal');
+        parsed = parseContactSheet(await readSheet(selected));
+      } catch (err) {
+        console.error('[contacts import] could not read xlsx:', err);
+        toast.error(t('toastXlsxUnreadable'));
+        return;
+      }
+    } else {
+      parsed = parseContactCsv(await selected.text());
+    }
     const {
       rows,
       hasTagsColumn: csvHasTags,
       hasCompanyColumn: csvHasCompany,
-    } = parseContactCsv(text);
+    } = parsed;
+    setHasConsentColumn(!!parsed.hasConsentColumn);
 
     if (rows.length === 0) {
       toast.error(t('toastNoValidRows'));
@@ -219,12 +252,38 @@ export function ImportModal({
       if (!user) throw new Error(t('notAuthenticated'));
       if (!accountId)
         throw new Error(t('notLinkedToAccount'));
+      if (consentAttested && !consentSource.trim()) {
+        throw new Error(t('consentSourceRequired'));
+      }
 
       let imported = 0;
       let skipped = 0;
       let failed = 0;
+      let excluded = 0;
+      let consentGranted = 0;
       const failedDetails: { phone: string; name?: string; reason: string }[] =
         [];
+
+      // Consent for a row: an explicit per-row `consent` value wins;
+      // otherwise the file-level attestation applies; otherwise unknown
+      // (imported, but not broadcastable until consent is recorded).
+      const consentFor = (row: ParsedContactRow): boolean | undefined =>
+        row.consent !== undefined ? row.consent : consentAttested ? true : undefined;
+      const consentStamp = {
+        consent_source: consentSource.trim() || null,
+        consent_evidence: consentEvidence.trim() || null,
+        consent_at: new Date().toISOString(),
+        consent_recorded_by: user.id,
+      };
+
+      // 0) Fill in the explicitly chosen country for national numbers
+      //    (e.g. 03xx… → +923xx…). Everything still has to end up as a
+      //    valid international number to pass dedupeByPhone below.
+      const country = defaultCountry === 'PK' ? DEFAULT_COUNTRIES.PK : null;
+      const prepared = parsedRows.map((row) => ({
+        ...row,
+        phone: applyDefaultCountry(row.phone, country),
+      }));
 
       // 1) De-dupe within the file by normalized phone (keep first).
       //    Rows with no usable phone at all are counted separately —
@@ -234,8 +293,17 @@ export function ImportModal({
         unique,
         duplicates: inFileDupes,
         invalid: invalidPhone,
-      } = dedupeByPhone(parsedRows);
+      } = dedupeByPhone(prepared);
       skipped += inFileDupes;
+
+      // 1b) Never import a number on the do-not-message list.
+      const { data: exclusionRows } = await supabase
+        .from('contact_exclusions')
+        .select('phone_normalized')
+        .eq('account_id', accountId);
+      const excludedKeys = new Set(
+        (exclusionRows ?? []).map((r) => (r as { phone_normalized: string }).phone_normalized)
+      );
 
       // 2) Skip numbers already in this account. One read of the
       //    generated `phone_normalized` column (migration 022) → Set.
@@ -251,9 +319,18 @@ export function ImportModal({
           .filter((p): p is string => !!p)
       );
 
+      // Existing contacts this import has consent for — recorded below
+      // (only where nothing is recorded yet; never over a revocation).
+      const existingConsentKeys: string[] = [];
       const toInsert = unique.filter((row) => {
-        if (existing.has(normalizeKey(row.phone))) {
+        const key = normalizeKey(row.phone);
+        if (excludedKeys.has(exclusionKey(row.phone))) {
+          excluded++;
+          return false;
+        }
+        if (existing.has(key)) {
           skipped++;
+          if (consentFor(row) === true) existingConsentKeys.push(key);
           return false;
         }
         return true;
@@ -282,14 +359,24 @@ export function ImportModal({
 
       for (let i = 0; i < toInsert.length; i += chunkSize) {
         const chunk = toInsert.slice(i, i + chunkSize);
-        const rows = chunk.map((row) => ({
-          user_id: user.id,
-          account_id: accountId,
-          phone: row.phone,
-          name: row.name || null,
-          email: row.email || null,
-          company: row.company || null,
-        }));
+        const rows = chunk.map((row) => {
+          const consent = consentFor(row);
+          return {
+            user_id: user.id,
+            account_id: accountId,
+            // Stored in canonical +E.164 form (dedupeByPhone already
+            // proved it parses).
+            phone: `+${parseInternationalPhone(row.phone)}`,
+            name: row.name || null,
+            email: row.email || null,
+            company: row.company || null,
+            ...(consent === true
+              ? { consent_status: 'granted', ...consentStamp }
+              : consent === false
+                ? { consent_status: 'revoked', consent_source: 'import_marked_no', consent_at: consentStamp.consent_at }
+                : {}),
+          };
+        });
 
         const { data, error } = await supabase
           .from('contacts')
@@ -310,6 +397,7 @@ export function ImportModal({
 
             if (!singleErr && singleData) {
               imported++;
+              if ('consent_status' in row && row.consent_status === 'granted') consentGranted++;
               if (source.tagNames.length > 0) {
                 tagAssignments.push({
                   contactId: singleData.id,
@@ -341,6 +429,9 @@ export function ImportModal({
         } else {
           const inserted = data ?? [];
           imported += inserted.length;
+          consentGranted += rows.filter(
+            (r) => 'consent_status' in r && r.consent_status === 'granted'
+          ).length;
           // inserted[j] ↔ chunk[j] only holds because a single INSERT
           // preserves RETURNING order. If this path is ever split into
           // parallel inserts, zip by phone or returned id instead.
@@ -368,6 +459,27 @@ export function ImportModal({
         toast.warning(t('toastTagsWarning'));
       }
 
+      // 6) Contacts that already existed: record this import's consent
+      //    where none is recorded yet. Never overwrites a revocation (and
+      //    the DB refuses to re-grant an excluded number anyway).
+      let consentRecordedExisting = 0;
+      for (let i = 0; i < existingConsentKeys.length; i += 200) {
+        const keys = existingConsentKeys.slice(i, i + 200);
+        const { data: updated, error: consentErr } = await supabase
+          .from('contacts')
+          .update({ consent_status: 'granted', ...consentStamp })
+          .eq('account_id', accountId)
+          .eq('consent_status', 'unknown')
+          .in('phone_normalized', keys)
+          .select('id');
+        if (consentErr) {
+          console.error('[contacts import] consent update failed:', consentErr);
+          toast.warning(t('toastConsentUpdateFailed'));
+          break;
+        }
+        consentRecordedExisting += updated?.length ?? 0;
+      }
+
       setResult({
         imported,
         skipped,
@@ -375,6 +487,9 @@ export function ImportModal({
         failed,
         failedDetails,
         tagsAssigned,
+        excluded,
+        consentGranted,
+        consentRecordedExisting,
       });
       if (imported > 0) {
         toast.success(t('toastImported', { count: imported }));
@@ -496,10 +611,57 @@ export function ImportModal({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={handleFileChange}
             className="hidden"
           />
+
+          {parsedRows.length > 0 && !result && (
+            <div className="space-y-3 rounded-xl border border-border/80 bg-background/40 p-3 text-sm">
+              <label className="flex flex-wrap items-center gap-2">
+                <span className="text-muted-foreground">{t('defaultCountryLabel')}</span>
+                <select
+                  value={defaultCountry}
+                  onChange={(e) => setDefaultCountry(e.target.value as 'PK' | 'none')}
+                  className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+                >
+                  <option value="PK">{t('defaultCountryPK')}</option>
+                  <option value="none">{t('defaultCountryNone')}</option>
+                </select>
+              </label>
+
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={consentAttested}
+                  onChange={(e) => setConsentAttested(e.target.checked)}
+                />
+                <span className="text-popover-foreground">{t('consentAttest')}</span>
+              </label>
+              {consentAttested && (
+                <div className="grid gap-2 pl-6 sm:grid-cols-2">
+                  <input
+                    aria-label={t('consentSourceLabel')}
+                    placeholder={t('consentSourcePlaceholder')}
+                    value={consentSource}
+                    onChange={(e) => setConsentSource(e.target.value)}
+                    className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+                  />
+                  <input
+                    aria-label={t('consentEvidenceLabel')}
+                    placeholder={t('consentEvidencePlaceholder')}
+                    value={consentEvidence}
+                    onChange={(e) => setConsentEvidence(e.target.value)}
+                    className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+                  />
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {hasConsentColumn ? t('consentColumnHint') : t('consentHint')}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
@@ -640,7 +802,24 @@ export function ImportModal({
                     {t('resultFailed', { count: result.failed })}
                   </div>
                 )}
+                {result.excluded > 0 && (
+                  <div className="flex items-center gap-1.5 text-sm text-amber-400">
+                    <AlertTriangle className="size-4 shrink-0" />
+                    {t('resultExcluded', { count: result.excluded })}
+                  </div>
+                )}
+                {result.consentGranted + result.consentRecordedExisting > 0 && (
+                  <div className="text-primary flex items-center gap-1.5 text-sm">
+                    <CheckCircle className="size-4 shrink-0" />
+                    {t('resultConsent', { count: result.consentGranted + result.consentRecordedExisting })}
+                  </div>
+                )}
               </div>
+              {result.imported > result.consentGranted && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t('resultNoConsentHint', { count: result.imported - result.consentGranted })}
+                </p>
+              )}
 
               {result.failedDetails.length > 0 && (
                 <div className="mt-3 space-y-1 border-t border-border/80 pt-3">
@@ -678,7 +857,11 @@ export function ImportModal({
           {!result && (
             <Button
               type="button"
-              disabled={parsedRows.length === 0 || importing}
+              disabled={
+                parsedRows.length === 0 ||
+                importing ||
+                (consentAttested && !consentSource.trim())
+              }
               onClick={handleImport}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >

@@ -49,10 +49,14 @@ import {
   SlidersHorizontal,
   Filter,
   X,
+  Ban,
+  ShieldCheck,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
+import { RecordConsentDialog } from '@/components/contacts/record-consent-dialog';
+import { ExclusionsDialog } from '@/components/contacts/exclusions-dialog';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
@@ -94,6 +98,8 @@ export default function ContactsPage() {
   // Bulk selection (page-scoped — only the loaded rows are selectable)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [exclusionsOpen, setExclusionsOpen] = useState(false);
 
   // All tags for display
   const [tagsMap, setTagsMap] = useState<Record<string, Tag>>({});
@@ -361,6 +367,24 @@ export default function ContactsPage() {
               {t('customFieldsBtn')}
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setExclusionsOpen(true)}
+            className="border-border text-muted-foreground hover:bg-muted"
+          >
+            <Ban className="size-4" />
+            {t('optOutListBtn')}
+          </Button>
+          <GatedButton
+            variant="outline"
+            canAct={canEdit}
+            gateReason={tGate('reasons.addOrImportContacts')}
+            onClick={() => setConsentOpen(true)}
+            className="border-border text-muted-foreground hover:bg-muted"
+          >
+            <ShieldCheck className="size-4" />
+            {t('recordConsentBtn')}
+          </GatedButton>
           <GatedButton
             variant="outline"
             canAct={canEdit}
@@ -515,6 +539,16 @@ export default function ContactsPage() {
               {t('clearSelection')}
             </Button>
             <GatedButton
+              variant="outline"
+              size="sm"
+              canAct={canEdit}
+              gateReason={tGate('reasons.addOrImportContacts')}
+              onClick={() => setConsentOpen(true)}
+            >
+              <ShieldCheck className="size-4" />
+              {t('recordConsentBtn')}
+            </GatedButton>
+            <GatedButton
               variant="destructive"
               size="sm"
               canAct={canEdit}
@@ -547,6 +581,7 @@ export default function ContactsPage() {
               <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.email')}</TableHead>
               <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.company')}</TableHead>
               <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.tags')}</TableHead>
+              <TableHead className="text-muted-foreground hidden md:table-cell">{t('tableColumns.consent')}</TableHead>
               <TableHead className="text-muted-foreground hidden lg:table-cell">{t('tableColumns.createdAt')}</TableHead>
               <TableHead className="text-muted-foreground w-12" />
             </TableRow>
@@ -554,7 +589,7 @@ export default function ContactsPage() {
           <TableBody>
             {loading ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <p className="text-sm text-muted-foreground">{t('loading')}</p>
@@ -563,7 +598,7 @@ export default function ContactsPage() {
               </TableRow>
             ) : contacts.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Users className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -637,6 +672,20 @@ export default function ContactsPage() {
                         </span>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <span
+                      title={contact.consent_source ?? undefined}
+                      className={
+                        contact.consent_status === 'granted'
+                          ? 'rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'
+                          : contact.consent_status === 'revoked'
+                            ? 'rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive'
+                            : 'text-[10px] text-muted-foreground'
+                      }
+                    >
+                      {t(`consentStatus.${contact.consent_status ?? 'unknown'}`)}
+                    </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
                     {new Date(contact.created_at).toLocaleDateString('en-US', {
@@ -797,6 +846,21 @@ export default function ContactsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RecordConsentDialog
+        open={consentOpen}
+        onOpenChange={setConsentOpen}
+        selectedIds={[...selected]}
+        onDone={() => {
+          setSelected(new Set());
+          fetchContacts();
+        }}
+      />
+      <ExclusionsDialog
+        open={exclusionsOpen}
+        onOpenChange={setExclusionsOpen}
+        onChanged={() => fetchContacts()}
+      />
 
       {/* Bulk Delete Confirmation */}
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
