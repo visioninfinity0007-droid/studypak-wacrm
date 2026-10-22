@@ -116,9 +116,11 @@ BEGIN
   END;
   IF NOT v_blocked THEN RAISE EXCEPTION 'college A inserted a contact into college B'; END IF;
 
+  v_step := 'as A: change own status';
   v_blocked := false;
   BEGIN
-    UPDATE public.accounts SET status = 'active' WHERE id = v_acc_a;
+    -- A real change (active → suspended); a no-op write is allowed by design.
+    UPDATE public.accounts SET status = 'suspended' WHERE id = v_acc_a;
   EXCEPTION WHEN insufficient_privilege THEN v_blocked := true;
   END;
   IF NOT v_blocked THEN RAISE EXCEPTION 'college admin changed its own account status'; END IF;
