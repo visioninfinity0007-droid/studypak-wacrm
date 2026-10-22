@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseContactCsv, parseTagCell } from './parse-contact-csv';
+import { parseContactCsv, parseContactSheet, parseTagCell } from './parse-contact-csv';
 
 describe('parseTagCell', () => {
   it('splits comma-separated tags and trims whitespace', () => {
@@ -34,6 +34,7 @@ describe('parseContactCsv', () => {
       hasPhoneColumn: true,
       hasTagsColumn: true,
       hasCompanyColumn: false,
+      hasConsentColumn: false,
       rows: [
         {
           phone: '+15551234567',
@@ -77,6 +78,7 @@ describe('parseContactCsv', () => {
       hasPhoneColumn: true,
       hasTagsColumn: false,
       hasCompanyColumn: false,
+      hasConsentColumn: false,
       rows: [
         {
           phone: '+15551234567',
@@ -87,5 +89,29 @@ describe('parseContactCsv', () => {
         },
       ],
     });
+  });
+});
+
+describe('parseContactSheet (XLSX rows)', () => {
+  it('reads the same columns as CSV and keeps long numeric phones intact', () => {
+    const sheet = [
+      ['Phone', 'Name', 'Tags', 'Consent'],
+      [923105478805, 'Ali', 'fsc; 2026', 'yes'],
+      ['03001234567', 'Sara', null, 'no'],
+      [null, null, null, null],
+      ['+92 333 1234567', 'Bilal', '', ''],
+    ];
+    const result = parseContactSheet(sheet);
+    expect(result.hasPhoneColumn).toBe(true);
+    expect(result.hasConsentColumn).toBe(true);
+    expect(result.rows).toEqual([
+      { phone: '923105478805', name: 'Ali', email: undefined, company: undefined, tagNames: ['fsc', '2026'], consent: true },
+      { phone: '03001234567', name: 'Sara', email: undefined, company: undefined, tagNames: [], consent: false },
+      { phone: '+92 333 1234567', name: 'Bilal', email: undefined, company: undefined, tagNames: [], consent: undefined },
+    ]);
+  });
+
+  it('reports a missing phone column', () => {
+    expect(parseContactSheet([['name'], ['Ali']]).hasPhoneColumn).toBe(false);
   });
 });
