@@ -69,3 +69,9 @@ jobs:
       # just the absence of an error.
       - name: Verify the resulting schema
         run: supabase db query --local --file supabase/ci/verify-schema.sql
+
+      # Contract requirement 1: two colleges on one deployment must not
+      # see or touch each other's data. Exercises the real RLS policies
+      # and platform-managed triggers as the `authenticated` role.
+      - name: Verify two-college tenant isolation
+        run: supabase db query --local --file supabase/ci/verify-tenant-isolation.sql

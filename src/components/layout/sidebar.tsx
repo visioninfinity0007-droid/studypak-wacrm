@@ -26,6 +26,7 @@ import {
   Workflow,
   X,
   Zap,
+  Building2,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
 
@@ -106,6 +107,9 @@ const bottomNavItems = [
   { href: "/settings", labelKey: "settings", icon: Settings },
 ];
 
+// Platform administrators only (Study in Pakistan) — college management.
+const adminNavItem = { href: "/admin", labelKey: "admin", icon: Building2 };
+
 interface SidebarProps {
   /** Controlled on mobile by the Header's hamburger button. Ignored on lg+. */
   open?: boolean;
@@ -117,7 +121,7 @@ import { useTranslations } from "next-intl";
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { profile, profileLoading, account, accountRole, signOut, isPlatformAdmin } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
@@ -277,7 +281,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           <div className="my-4 border-t border-border" />
 
           <ul className="flex flex-col gap-1">
-            {bottomNavItems.map((item) => {
+            {(isPlatformAdmin ? [adminNavItem, ...bottomNavItems] : bottomNavItems).map((item) => {
               const isActive = pathname.startsWith(item.href);
               return (
                 <li key={item.href}>

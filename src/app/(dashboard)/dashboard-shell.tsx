@@ -14,8 +14,36 @@ import { BrowserNotificationsListener } from "@/components/notifications/browser
 // itself can stay a server component and export metadata (noindex) —
 // client components can't export Next's metadata object.
 
+// Pending (self-service signup awaiting approval) or suspended college:
+// nothing in the app would work — the API refuses them (requireRole) —
+// so say so instead of rendering a dashboard where every action fails.
+// Platform admins are never locked out, so they can always reach /admin.
+function CollegeInactiveScreen({ status }: { status: "pending" | "suspended" }) {
+  const { signOut } = useAuth();
+  const t = useTranslations("DashboardShell");
+  return (
+    <div className="flex h-screen items-center justify-center bg-background p-6">
+      <div className="max-w-md space-y-3 text-center">
+        <h1 className="text-xl font-semibold text-foreground">
+          {status === "pending" ? t("pendingTitle") : t("suspendedTitle")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {status === "pending" ? t("pendingBody") : t("suspendedBody")}
+        </p>
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          {t("signOut")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, account, isPlatformAdmin } = useAuth();
   const router = useRouter();
   const t = useTranslations("DashboardShell");
 
@@ -42,6 +70,10 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
+
+  if (account && account.status !== "active" && !isPlatformAdmin) {
+    return <CollegeInactiveScreen status={account.status} />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

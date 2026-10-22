@@ -30,6 +30,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasMinRole, isAccountRole, type AccountRole } from "./roles";
+import { normalizeCollegeStatus, type CollegeStatus } from "@/lib/admin/college-status";
 import { getT } from "@/lib/i18n/translate";
 
 const t = getT("LibErrors.auth");
@@ -90,8 +91,8 @@ export interface AccountContext {
   accountId: string;
   /** Caller's role within their account. */
   role: AccountRole;
-  /** Lightweight account meta — id + name. */
-  account: { id: string; name: string };
+  /** Lightweight account meta — id + name + college status. */
+  account: { id: string; name: string; status: CollegeStatus };
 }
 
 /**
@@ -152,7 +153,10 @@ export async function getCurrentAccount(): Promise<AccountContext> {
   // RLS, so it stays robust against cache staleness and older schemas.
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
-    .select("id, name")
+    // `*` rather than a column list: `status` arrives with migration
+    // 062, and naming it would fail every request on a database that
+    // hasn't been migrated yet. Absent status reads as 'active'.
+    .select("*")
     .eq("id", data.account_id)
     .maybeSingle();
 
@@ -166,12 +170,19 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     throw new ForbiddenError(t("notLinked"));
   }
 
+  // Pending (self-service signup awaiting approval) and suspended
+  // colleges can't use the API — this is the gate in front of every
+  // send/broadcast/template route, which all go through requireRole.
+  const status = normalizeCollegeStatus(account.status);
+  if (status === "pending") throw new ForbiddenError(t("accountPending"));
+  if (status === "suspended") throw new ForbiddenError(t("accountSuspended"));
+
   return {
     supabase,
     userId: user.id,
     accountId: data.account_id,
     role: data.account_role,
-    account: { id: account.id, name: account.name },
+    account: { id: account.id, name: account.name, status },
   };
 }
 
