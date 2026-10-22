@@ -80,8 +80,8 @@ const TOKEN_HINT =
   'with the whatsapp_business_management and whatsapp_business_messaging permissions, ' +
   'and paste it into Permanent Access Token.'
 
-const RATE_LIMIT_CODES = new Set([4, 17, 32, 613, 80007, 130429, 131048, 131056])
-const TEMPORARY_CODES = new Set([1, 2, 131000, 133004, 133016])
+export const RATE_LIMIT_CODES = new Set([4, 17, 32, 613, 80007, 130429, 131048, 131056])
+export const TEMPORARY_CODES = new Set([1, 2, 131000, 133004, 133016])
 
 function isMetaErrorLike(err: unknown): err is MetaErrorLike {
   return (

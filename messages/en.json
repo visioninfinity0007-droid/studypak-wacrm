@@ -1012,7 +1012,11 @@
       "toastResumeStartedCapped": "Sending {count} recipients in the background. {remaining} more will need another run.",
       "toastResumeFailed": "Could not resume: {error}",
       "unknownError": "Unknown error",
-      "unknownContact": "Unknown"
+      "unknownContact": "Unknown",
+      "queueSendingTitle": "Sending in the background",
+      "queueSendingHint": "{count} recipients are queued. Sending continues on the server — you can close this page. Temporary WhatsApp errors are retried automatically.",
+      "queueSendNow": "Send now",
+      "toastQueueNudged": "Sending started on the server."
     },
     "new": {
       "title": "New Broadcast",

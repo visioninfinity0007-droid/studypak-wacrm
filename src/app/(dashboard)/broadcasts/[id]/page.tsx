@@ -197,6 +197,14 @@ export default function BroadcastDetailPage() {
     fetchData();
   }, [fetchData]);
 
+  // While the server-side queue is sending, refresh progress every 5 s.
+  const isSending = broadcast?.status === 'sending';
+  useEffect(() => {
+    if (!isSending) return;
+    const timer = setInterval(() => void fetchData(), 5000);
+    return () => clearInterval(timer);
+  }, [isSending, fetchData]);
+
   const filteredRecipients = useMemo(
     () =>
       statusFilter === 'all'
@@ -241,6 +249,19 @@ export default function BroadcastDetailPage() {
   async function handleResume(scope: 'pending' | 'failed') {
     setResumingScope(scope);
     try {
+      // Pending recipients belong to the server-side queue (contract
+      // requirement 4): nudge it to run a pass now instead of starting a
+      // separate resume run.
+      if (scope === 'pending') {
+        const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/queue`, { method: 'POST' });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          throw new Error((payload as { error?: string }).error || res.statusText);
+        }
+        toast.success(t('toastQueueNudged'));
+        await fetchData();
+        return;
+      }
       const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/resume`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -416,11 +437,11 @@ export default function BroadcastDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">
-              {isStalled ? t('resumeStalledTitle') : t('resumeTitle')}
+              {isStalled ? t('queueSendingTitle') : t('resumeTitle')}
             </p>
             <p className="mt-0.5 text-muted-foreground">
               {isStalled
-                ? t('resumeStalledHint', { count: pendingCount })
+                ? t('queueSendingHint', { count: pendingCount })
                 : t('resumeHint', { count: retryableCount })}
             </p>
           </div>
@@ -436,7 +457,7 @@ export default function BroadcastDetailPage() {
                 ) : (
                   <PlayCircle className="h-3.5 w-3.5" />
                 )}
-                {t('resumePending', { count: pendingCount })}
+                {t('queueSendNow')}
               </Button>
             )}
             {retryableCount > 0 && (

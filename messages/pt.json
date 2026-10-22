@@ -1012,7 +1012,11 @@
       "toastResumeStartedCapped": "Enviando para {count} destinatários em segundo plano. Outros {remaining} precisarão de mais uma execução.",
       "toastResumeFailed": "Não foi possível retomar: {error}",
       "unknownError": "Erro desconhecido",
-      "unknownContact": "Desconhecido"
+      "unknownContact": "Desconhecido",
+      "queueSendingTitle": "Sending in the background",
+      "queueSendingHint": "{count} recipients are queued. Sending continues on the server — you can close this page. Temporary WhatsApp errors are retried automatically.",
+      "queueSendNow": "Send now",
+      "toastQueueNudged": "Sending started on the server."
     },
     "new": {
       "title": "Novo disparo",
