@@ -41,7 +41,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "admin": "Colleges"
   },
   "Header": {
     "dashboard": "Dashboard",
@@ -2386,7 +2387,12 @@
     "defaultListButton": "Menu"
   },
   "DashboardShell": {
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "pendingTitle": "Awaiting approval",
+    "pendingBody": "Your account has been created and is waiting for approval by Study in Pakistan. You'll be able to use the portal once it's approved.",
+    "suspendedTitle": "Account suspended",
+    "suspendedBody": "This college account has been suspended. Please contact Study in Pakistan to reactivate it.",
+    "signOut": "Sign out"
   },
   "UiPrimitives": {
     "close": "Close"
@@ -2543,7 +2549,10 @@
         "admin": "admin",
         "agent": "agent",
         "viewer": "viewer"
-      }
+      },
+      "accountPending": "This college account is awaiting approval by the platform administrator.",
+      "accountSuspended": "This college account is suspended. Contact the platform administrator.",
+      "platformAdminOnly": "Only platform administrators can do this."
     },
     "rateLimitExceeded": "Rate limit exceeded",
     "send": {
@@ -2922,6 +2931,73 @@
       "submitFailed": "Failed to submit template.",
       "metaApiStatus": "Meta API error: {status}",
       "syncFailed": "Failed to sync templates"
+    },
+    "adminColleges": {
+      "loadFailed": "Could not load colleges.",
+      "invalidField": "Invalid value for {field}.",
+      "emailTaken": "A user with this email already exists.",
+      "createFailed": "Could not create the college.",
+      "updateFailed": "Could not update the college.",
+      "notFound": "College not found.",
+      "ownPassword": "Change your own password from Settings → Security."
     }
+  },
+  "Admin": {
+    "title": "Colleges",
+    "description": "Create and manage college accounts. Each college has its own logins, contacts, campaigns and WhatsApp number.",
+    "notAllowed": "Only platform administrators can manage colleges.",
+    "refresh": "Refresh",
+    "newCollege": "New college",
+    "newCollegeDesc": "Creates the college and a login for its administrator. You'll get a one-time password to share with them.",
+    "empty": "No colleges yet.",
+    "colCollege": "College",
+    "colStatus": "Status",
+    "colMembers": "Users",
+    "colContacts": "Contacts",
+    "colCampaigns": "Campaigns",
+    "colWhatsapp": "WhatsApp",
+    "colRate": "PKR / message",
+    "colActions": "Actions",
+    "status": {
+      "active": "Active",
+      "pending": "Pending",
+      "suspended": "Suspended"
+    },
+    "waConnected": "Connected (…{tail})",
+    "waDisconnected": "Disconnected",
+    "waNone": "Not connected",
+    "rateLabel": "PKR rate per message for {college}",
+    "ratePlaceholder": "Not set",
+    "rateSaved": "Rate saved",
+    "rateHint": "The PKR rate is an estimate shown before sending; campaigns can't be sent until a rate is set. Actual Meta charges may differ.",
+    "save": "Save",
+    "approve": "Approve",
+    "approved": "College approved",
+    "suspend": "Suspend",
+    "suspendConfirm": "Suspend {college}? Its users will be blocked until you reactivate it.",
+    "suspended": "College suspended",
+    "reactivate": "Reactivate",
+    "reactivated": "College reactivated",
+    "resetPassword": "Issue new password",
+    "resetConfirm": "Issue a new one-time password for {email}? Their current password stops working.",
+    "newPasswordTitle": "New password for {college}",
+    "createdTitle": "{college} created",
+    "loginOnce": "Share these details with the college administrator. The password is shown only once — ask them to change it under Settings → Security after signing in.",
+    "loginEmail": "Email",
+    "loginPassword": "One-time password",
+    "loginShareText": "Study in Pakistan portal: https://portal.localpk.com — email: {email} — password: {password} (please change it after signing in)",
+    "copy": "Copy",
+    "copied": "Copied",
+    "clipboardBlocked": "Couldn't copy — select the text and copy it manually.",
+    "done": "Done",
+    "collegeName": "College name",
+    "adminName": "College administrator's name",
+    "adminEmail": "College administrator's email",
+    "cancel": "Cancel",
+    "create": "Create college",
+    "createFailed": "Could not create the college.",
+    "updateFailed": "Could not update the college.",
+    "loadFailed": "Could not load colleges.",
+    "networkError": "Network error — please try again."
   }
 }

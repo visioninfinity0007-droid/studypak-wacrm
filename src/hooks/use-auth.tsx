@@ -13,6 +13,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { normalizeCollegeStatus, type CollegeStatus } from "@/lib/admin/college-status";
 import {
   canEditSettings as canEditSettingsFor,
   canManageMembers as canManageMembersFor,
@@ -43,6 +44,8 @@ interface AccountSummary {
   /** Default deal currency (ISO-4217). NOT NULL DEFAULT 'USD' in the
    *  DB (migration 021); narrowed to DEFAULT_CURRENCY when absent. */
   default_currency: string;
+  /** College lifecycle (migration 062). 'active' on older schemas. */
+  status: CollegeStatus;
 }
 
 /**
@@ -116,6 +119,9 @@ interface AuthContextValue {
    *  while loading or when no account is resolved, so callers can use
    *  it unconditionally. */
   defaultCurrency: string;
+  /** True if this user is a platform (Study in Pakistan) administrator
+   *  — sees /admin. False while loading and on pre-062 schemas. */
+  isPlatformAdmin: boolean;
   /** True if `accountRole === 'owner'`. */
   isOwner: boolean;
   /** True if `accountRole === 'admin'` (does NOT include owner — use canManageMembers for "admin or above"). */
@@ -163,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [account, setAccount] = useState<AccountSummary | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   // Why the account/role couldn't be established, when it couldn't.
   // Null on the happy path.
@@ -237,9 +244,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data.account_id) {
           const { data: account, error: accountErr } = await supabase
             .from("accounts")
-            // default_currency added in migration 021; narrowed to the
-            // USD fallback below for older schemas where it reads null.
-            .select("id, name, default_currency")
+            // `*` so status (migration 062) is picked up when present
+            // without breaking older schemas; default_currency (021) is
+            // narrowed to the USD fallback below when it reads null.
+            .select("*")
             .eq("id", data.account_id)
             .maybeSingle();
           if (accountErr) {
@@ -254,6 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: account.id,
               name: account.name,
               default_currency: account.default_currency ?? DEFAULT_CURRENCY,
+              status: normalizeCollegeStatus(account.status),
             };
           }
         }
@@ -282,6 +291,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           account_role: accountRole,
         });
         setAccount(accountRow);
+        // Own row only (RLS); a missing table on pre-062 schemas just
+        // errors, which reads as "not a platform admin".
+        const { data: adminRow } = await supabase
+          .from("platform_admins")
+          .select("user_id")
+          .eq("user_id", userId)
+          .maybeSingle();
+        setIsPlatformAdmin(!!adminRow);
         if (!data.account_id || !accountRole) {
           // The row exists but carries no tenancy. Migration 017 made
           // both columns NOT NULL for new signups, so this is a user
@@ -386,6 +403,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setAccount(null);
+    setIsPlatformAdmin(false);
     window.location.href = "/login";
   }, []);
 
@@ -438,6 +456,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         defaultCurrency: account?.default_currency ?? DEFAULT_CURRENCY,
         accountStatus,
         accountStatusDetail: statusDetail,
+        isPlatformAdmin,
         ...derived,
       }}
     >
@@ -467,6 +486,7 @@ export function useAuth(): AuthContextValue {
       },
       refreshProfile: async () => {},
       account: null,
+      isPlatformAdmin: false,
       defaultCurrency: DEFAULT_CURRENCY,
       // Outside the provider there is nothing to resolve yet — 'loading'
       // keeps the access alert from firing on, say, the login page.

@@ -174,3 +174,38 @@ describe("getCurrentAccount", () => {
     );
   });
 });
+
+describe("getCurrentAccount — college status (migration 062)", () => {
+  function clientWithAccount(account: Record<string, unknown>) {
+    return makeClient({
+      user: { id: "user-1" },
+      byTable: {
+        profiles: { data: { account_id: "acct-1", account_role: "owner" }, error: null },
+        accounts: { data: { id: "acct-1", name: "Acme", ...account }, error: null },
+      },
+    }).client;
+  }
+
+  it("treats an account without a status column (pre-062) as active", async () => {
+    createClient.mockReturnValue(clientWithAccount({}));
+    const ctx = await getCurrentAccount();
+    expect(ctx.account.status).toBe("active");
+  });
+
+  it("allows an active college", async () => {
+    createClient.mockReturnValue(clientWithAccount({ status: "active" }));
+    await expect(getCurrentAccount()).resolves.toMatchObject({
+      account: { status: "active" },
+    });
+  });
+
+  it("refuses a pending college with a ForbiddenError", async () => {
+    createClient.mockReturnValue(clientWithAccount({ status: "pending" }));
+    await expect(getCurrentAccount()).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("refuses a suspended college with a ForbiddenError", async () => {
+    createClient.mockReturnValue(clientWithAccount({ status: "suspended" }));
+    await expect(getCurrentAccount()).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
