@@ -14,6 +14,7 @@
  */
 
 export const THEME_IDS = [
+  "sip",
   "violet",
   "emerald",
   "cobalt",
@@ -23,7 +24,7 @@ export const THEME_IDS = [
 
 export type ThemeId = (typeof THEME_IDS)[number];
 
-export const DEFAULT_THEME: ThemeId = "violet";
+export const DEFAULT_THEME: ThemeId = "sip";
 
 export const STORAGE_KEY = "wacrm.theme";
 
@@ -68,9 +69,15 @@ export interface ThemeMeta {
 
 export const THEMES: ReadonlyArray<ThemeMeta> = [
   {
+    id: "sip",
+    name: "Study in Pakistan",
+    tagline: "The Study in Pakistan brand green — the portal default.",
+    swatch: "oklch(0.512 0.126 155)",
+  },
+  {
     id: "violet",
     name: "Violet",
-    tagline: "The default — confident, slightly playful.",
+    tagline: "The original wacrm violet — confident, slightly playful.",
     swatch: "oklch(0.526 0.247 293)",
   },
   {
