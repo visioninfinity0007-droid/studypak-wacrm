@@ -26,6 +26,16 @@ DECLARE
   v_step TEXT := 'start';
 BEGIN
   -- ---------- setup (as postgres) ----------
+  -- Hosted Supabase grants the Data API roles table privileges on public
+  -- tables by default (that's how the live app reads them); the local CLI
+  -- database used in CI does not. Mirror the hosted grants for the tables
+  -- under test so that row-level security — the thing being tested — is
+  -- what allows or denies each statement, not a missing GRANT.
+  v_step := 'setup: mirror hosted Data API grants';
+  GRANT SELECT, INSERT, UPDATE, DELETE
+    ON public.accounts, public.profiles, public.contacts, public.whatsapp_config,
+       public.message_templates, public.broadcasts
+    TO authenticated;
   v_step := 'setup: create auth users';
   INSERT INTO auth.users (id, email, aud, role, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   VALUES
