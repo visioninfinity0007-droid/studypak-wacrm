@@ -23,8 +23,10 @@ DECLARE
   v_blocked BOOLEAN;
   v_status TEXT;
   v_name TEXT;
+  v_step TEXT := 'start';
 BEGIN
   -- ---------- setup (as postgres) ----------
+  v_step := 'setup: create auth users';
   INSERT INTO auth.users (id, email, aud, role, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   VALUES
     (v_a, 'college-a@isolation.test', 'authenticated', 'authenticated',
@@ -51,6 +53,7 @@ BEGIN
     RAISE EXCEPTION 'self-service signup should start pending, got %', v_status;
   END IF;
 
+  v_step := 'setup: seed college data';
   INSERT INTO public.contacts (user_id, account_id, phone, name) VALUES
     (v_a, v_acc_a, '+920000000001', 'Student A');
   INSERT INTO public.contacts (user_id, account_id, phone, name) VALUES
@@ -66,10 +69,12 @@ BEGIN
     (v_b, v_acc_b, 'Campaign B', 'tpl_b');
 
   -- ---------- act as college A ----------
+  v_step := 'as A: switch role';
   PERFORM set_config('request.jwt.claims',
     json_build_object('sub', v_a, 'role', 'authenticated')::text, true);
   EXECUTE 'SET LOCAL ROLE authenticated';
 
+  v_step := 'as A: read own data';
   SELECT count(*) INTO v_n FROM public.contacts;
   IF v_n <> 1 THEN RAISE EXCEPTION 'college A should see exactly 1 contact, saw %', v_n; END IF;
   SELECT count(*) INTO v_n FROM public.contacts WHERE account_id = v_acc_b;
@@ -84,6 +89,7 @@ BEGIN
   SELECT count(*) INTO v_n FROM public.accounts;
   IF v_n <> 1 THEN RAISE EXCEPTION 'college A should see exactly 1 account, saw %', v_n; END IF;
 
+  v_step := 'as A: write to college B';
   UPDATE public.contacts SET name = 'hijacked' WHERE id = v_contact_b;
   GET DIAGNOSTICS v_n = ROW_COUNT;
   IF v_n <> 0 THEN RAISE EXCEPTION 'college A updated a college B contact'; END IF;
@@ -130,6 +136,7 @@ BEGIN
   EXECUTE 'RESET ROLE';
 
   -- ---------- act as college B (mirror check) ----------
+  v_step := 'as B: mirror check';
   PERFORM set_config('request.jwt.claims',
     json_build_object('sub', v_b, 'role', 'authenticated')::text, true);
   EXECUTE 'SET LOCAL ROLE authenticated';
@@ -142,4 +149,8 @@ BEGIN
   EXECUTE 'RESET ROLE';
 
   RAISE NOTICE 'tenant isolation: all checks passed';
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'tenant isolation failed at step "%": % [SQLSTATE %] (current_user=%, session_user=%, has SELECT on contacts as authenticated=%)',
+    v_step, SQLERRM, SQLSTATE, current_user, session_user,
+    has_table_privilege('authenticated', 'public.contacts', 'SELECT');
 END $$;
