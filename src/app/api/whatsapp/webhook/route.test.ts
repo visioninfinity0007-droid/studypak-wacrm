@@ -1119,8 +1119,10 @@ describe('status webhook: scoped to the receiving number', () => {
   it('resolves the account from metadata.phone_number_id before touching messages', async () => {
     await runStatusWebhook(DELIVERED)
 
+    // One lookup by phone_number_id (src/lib/whatsapp/number-routing.ts
+    // reads the whole row so it can also serve message events).
     expect(h.state.whatsappConfigLookups).toEqual([
-      { columns: 'account_id', value: 'pn-1' },
+      { columns: '*', value: 'pn-1' },
     ])
     expect(h.applyMessageStatus).toHaveBeenCalledWith(
       expect.anything(),

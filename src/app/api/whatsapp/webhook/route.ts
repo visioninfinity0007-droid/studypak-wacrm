@@ -33,6 +33,7 @@ import {
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
 import { handleOptKeyword } from '@/lib/contacts/opt-keywords'
+import { resolveConfigForPhoneNumber } from '@/lib/whatsapp/number-routing'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -278,26 +279,18 @@ export async function POST(request: Request) {
   return NextResponse.json({ status: 'received' }, { status: 200 })
 }
 
+// Main number or an additional number of a college (migration 065) — see
+// src/lib/whatsapp/number-routing.ts. Additional numbers matter for
+// receipts: a campaign sent from a college's previous number keeps
+// getting delivered/read statuses on that number.
 async function resolveAccountForPhoneNumber(
   phoneNumberId: string | undefined
 ): Promise<string | null> {
-  if (!phoneNumberId) return null
-  const { data, error } = await supabaseAdmin()
-    .from('whatsapp_config')
-    .select('account_id')
-    .eq('phone_number_id', phoneNumberId)
-
-  if (error) {
-    console.error('Error resolving account for status update:', phoneNumberId, error)
-    return null
-  }
-  if (!data || data.length !== 1) {
-    console.error(
-      `Status update for phone_number_id ${phoneNumberId} matched ${data?.length ?? 0} configs; message statuses skipped`
-    )
-    return null
-  }
-  return data[0].account_id
+  const resolved = await resolveConfigForPhoneNumber<{ account_id: string }>(
+    supabaseAdmin(),
+    phoneNumberId
+  )
+  return resolved?.config.account_id ?? null
 }
 
 function metaTimestampToIso(timestamp: string): string | null {
@@ -347,42 +340,20 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
 
       const phoneNumberId = value.metadata.phone_number_id
 
-      // Find user's config by phone_number_id. `.single()` returns
-      // PGRST116 for both 0 rows AND ≥2 rows — distinguish them so
-      // operators see the real cause in logs. ≥2 rows shouldn't happen
-      // post-migration 013 (UNIQUE constraint), but a row created
-      // before the constraint, or a race, would still surface here.
-      const { data: configRows, error: configError } = await supabaseAdmin()
-        .from('whatsapp_config')
-        .select('*')
-        .eq('phone_number_id', phoneNumberId)
+      // The college this number belongs to — its main number, or an
+      // additional number such as the one an earlier broadcast went out
+      // from (migration 065), so students' replies to it still reach the
+      // college's Inbox. Unknown / ambiguous numbers are logged and dropped
+      // inside the resolver.
+      const resolved = await resolveConfigForPhoneNumber<{
+        account_id: string
+        user_id: string
+        access_token: string
+        mirror_inbound_media?: boolean | null
+      }>(supabaseAdmin(), phoneNumberId)
+      if (!resolved) continue
 
-      if (configError) {
-        console.error(
-          'Error fetching whatsapp_config for phone_number_id:',
-          phoneNumberId,
-          configError
-        )
-        continue
-      }
-
-      if (!configRows || configRows.length === 0) {
-        console.error('No config found for phone_number_id:', phoneNumberId)
-        continue
-      }
-
-      if (configRows.length > 1) {
-        console.error(
-          `Multiple configs (${configRows.length}) found for phone_number_id:`,
-          phoneNumberId,
-          '— inbound message dropped. Resolve duplicates so each number maps to a single account.',
-          'Account owners:',
-          configRows.map((r: { account_id: string; user_id: string }) => `${r.account_id} (admin ${r.user_id})`)
-        )
-        continue
-      }
-
-      const config = configRows[0]
+      const config = resolved.config
 
       const decryptedAccessToken = decrypt(config.access_token)
 
