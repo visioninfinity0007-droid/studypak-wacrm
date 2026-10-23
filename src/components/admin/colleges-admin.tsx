@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Building2, Copy, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Activity, Building2, Copy, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
@@ -65,7 +65,18 @@ async function readError(res: Response, fallback: string): Promise<string> {
   return (body && typeof body.error === 'string' && body.error) || fallback;
 }
 
-export function CollegesAdmin() {
+export function CollegesAdmin({
+  onShowBroadcasts,
+  onShowActivity,
+  onChanged,
+}: {
+  /** Jump to the Campaigns tab filtered to this college. */
+  onShowBroadcasts?: (collegeId: string) => void;
+  /** Jump to the Activity tab filtered to this college. */
+  onShowActivity?: (collegeId: string) => void;
+  /** A college was created — refresh lists that name colleges. */
+  onChanged?: () => void;
+} = {}) {
   const t = useTranslations('Admin');
   const { isPlatformAdmin, profileLoading } = useAuth();
 
@@ -213,7 +224,20 @@ export function CollegesAdmin() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{c.members}</TableCell>
                         <TableCell className="text-right tabular-nums">{c.contacts}</TableCell>
-                        <TableCell className="text-right tabular-nums">{c.broadcasts}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {onShowBroadcasts ? (
+                            <button
+                              type="button"
+                              className="text-primary underline-offset-2 hover:underline"
+                              title={t('showCampaigns', { college: c.name })}
+                              onClick={() => onShowBroadcasts(c.id)}
+                            >
+                              {c.broadcasts}
+                            </button>
+                          ) : (
+                            c.broadcasts
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">
                           {c.whatsapp
                             ? c.whatsapp.connected
@@ -269,6 +293,14 @@ export function CollegesAdmin() {
                                 {t('reactivate')}
                               </Button>
                             )}
+                            {onShowActivity && (
+                              <Button size="sm" variant="ghost"
+                                aria-label={t('showActivity', { college: c.name })}
+                                title={t('showActivity', { college: c.name })}
+                                onClick={() => onShowActivity(c.id)}>
+                                <Activity className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button size="sm" variant="ghost" disabled={busy}
                               aria-label={t('resetPassword')} title={t('resetPassword')}
                               onClick={() => void resetPassword(c)}>
@@ -295,6 +327,7 @@ export function CollegesAdmin() {
           setCreateOpen(false);
           setLogin({ title: t('createdTitle', { college: collegeName }), login: created });
           void load();
+          onChanged?.();
         }}
       />
       <LoginDialog value={login} onClose={() => setLogin(null)} />
