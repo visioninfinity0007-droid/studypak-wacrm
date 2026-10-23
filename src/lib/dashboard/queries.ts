@@ -7,34 +7,43 @@ const BROADCAST_STATUS_KEYS = new Set(['draft', 'scheduled', 'sending', 'sent', 
 
 type DB = SupabaseClient
 
-export async function loadActivity(db: DB, limit = 20): Promise<ActivityItem[]> {
+/**
+ * Recent activity. Member views pass the RLS-scoped client, which only
+ * sees the member's own college. The platform-admin view passes the
+ * service-role client, which sees every college — so it must also pass
+ * `accountId`, and every query is then filtered to that college.
+ */
+export async function loadActivity(
+  db: DB,
+  limit = 20,
+  opts: { accountId?: string } = {},
+): Promise<ActivityItem[]> {
+  const accountId = opts.accountId
+  // messages has no account_id of its own; filter through its conversation.
+  const msgSelect: string = accountId
+    ? 'id, content_text, sender_type, created_at, conversation_id, conversations!inner(contact_id, account_id, contacts(name, phone))'
+    : 'id, content_text, sender_type, created_at, conversation_id, conversations(contact_id, contacts(name, phone))'
+  let msgQ = db.from('messages').select(msgSelect).eq('sender_type', 'customer')
+  let contactQ = db.from('contacts').select('id, name, phone, created_at')
+  let dealQ = db.from('deals').select('id, title, updated_at, stage:pipeline_stages(name)')
+  let broadcastQ = db.from('broadcasts').select('id, name, status, total_recipients, created_at')
+  let autoQ = db
+    .from('automation_logs')
+    .select('id, trigger_event, status, created_at, automation:automations(name), contact:contacts(name, phone)')
+  if (accountId) {
+    msgQ = msgQ.eq('conversations.account_id', accountId)
+    contactQ = contactQ.eq('account_id', accountId)
+    dealQ = dealQ.eq('account_id', accountId)
+    broadcastQ = broadcastQ.eq('account_id', accountId)
+    autoQ = autoQ.eq('account_id', accountId)
+  }
+
   const [msgs, contacts, deals, broadcasts, autoLogs] = await Promise.all([
-    db
-      .from('messages')
-      .select('id, content_text, sender_type, created_at, conversation_id, conversations(contact_id, contacts(name, phone))')
-      .eq('sender_type', 'customer')
-      .order('created_at', { ascending: false })
-      .limit(40),
-    db
-      .from('contacts')
-      .select('id, name, phone, created_at')
-      .order('created_at', { ascending: false })
-      .limit(10),
-    db
-      .from('deals')
-      .select('id, title, updated_at, stage:pipeline_stages(name)')
-      .order('updated_at', { ascending: false })
-      .limit(10),
-    db
-      .from('broadcasts')
-      .select('id, name, status, total_recipients, created_at')
-      .order('created_at', { ascending: false })
-      .limit(5),
-    db
-      .from('automation_logs')
-      .select('id, trigger_event, status, created_at, automation:automations(name), contact:contacts(name, phone)')
-      .order('created_at', { ascending: false })
-      .limit(10),
+    msgQ.order('created_at', { ascending: false }).limit(40),
+    contactQ.order('created_at', { ascending: false }).limit(10),
+    dealQ.order('updated_at', { ascending: false }).limit(10),
+    broadcastQ.order('created_at', { ascending: false }).limit(5),
+    autoQ.order('created_at', { ascending: false }).limit(10),
   ])
 
   const items: ActivityItem[] = []
