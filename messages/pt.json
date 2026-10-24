@@ -585,7 +585,11 @@
         "unknown": "Not recorded",
         "granted": "Consented",
         "revoked": "Opted out"
-      }
+      },
+      "listsBtn": "Lists",
+      "filterByList": "Filter by list",
+      "allLists": "All contacts",
+      "listOption": "{name} ({count, number})"
     },
     "form": {
       "addTitle": "Adicionar contato",
@@ -754,7 +758,27 @@
       "consentEvidenceLabel": "Evidence (optional)",
       "consentEvidencePlaceholder": "Evidence, e.g. form file / reference",
       "consentHint": "Only contacts with recorded consent receive broadcasts. Numbers on the opt-out list are never imported.",
-      "consentColumnHint": "This file has a consent column: rows marked yes/no use that value; blank rows follow the box above."
+      "consentColumnHint": "This file has a consent column: rows marked yes/no use that value; blank rows follow the box above.",
+      "listLabel": "Save to list",
+      "listModeNew": "New list",
+      "listModeExisting": "Existing list",
+      "listModeNone": "Don't add to a list",
+      "listNameLabel": "List name",
+      "listPickLabel": "Choose a list",
+      "listHint": "Numbers already in your contacts are added to this list too, and shown below as duplicates with the lists they are already in.",
+      "listNameRequired": "Enter a name for the new list.",
+      "listPickRequired": "Choose the list to add these contacts to.",
+      "toastListFailed": "Contacts were imported, but saving them to the list failed. Try importing the file again.",
+      "resultList": "{count, number} {count, plural, =1 {contact} other {contacts}} saved to the list \"{list}\"",
+      "dupTitle": "{count, number} {count, plural, =1 {number was} other {numbers were}} already in your contacts",
+      "dupSummary": "{inLists, number} of {count, number} {inLists, plural, =1 {is} other {are}} already in another list. They were not created again.",
+      "dupDownload": "Download list",
+      "dupColPhone": "Phone",
+      "dupColName": "Name",
+      "dupColLists": "Also in lists",
+      "dupAlreadyInThisList": "Already in this list",
+      "dupNoList": "No other list",
+      "dupMore": "{count, number} more in the download"
     },
     "customFields": {
       "title": "Campos personalizados",
@@ -808,6 +832,31 @@
       "removed": "Removed from the opt-out list",
       "removeFailed": "Could not remove — only admins can remove numbers from the opt-out list",
       "loadFailed": "Could not load the opt-out list"
+    },
+    "lists": {
+      "title": "Contact lists",
+      "desc": "Each uploaded sheet is saved as a list. A student can be in several lists.",
+      "empty": "No lists yet. Import a sheet to create one.",
+      "nameLabel": "List name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "done": "Done",
+      "meta": "{count, number} {count, plural, =1 {contact} other {contacts}} · created {date}",
+      "rename": "Rename {name}",
+      "delete": "Delete {name}",
+      "renamed": "List renamed.",
+      "renameFailed": "Could not rename the list.",
+      "nameTaken": "Another list already has this name.",
+      "deleteTitle": "Delete \"{name}\"?",
+      "deleteDesc": "The list has {count, number} {count, plural, =1 {contact} other {contacts}}. Deleting the list keeps them in Contacts unless you tick the box below.",
+      "alsoDeleteContacts": "Also delete the {count, number} {count, plural, =1 {contact} other {contacts}} that {count, plural, =1 {is} other {are}} in no other list",
+      "alsoDeleteHint": "Their chats are deleted too. Campaign statistics are kept. This cannot be undone.",
+      "deleteListOnly": "Delete list",
+      "deleteListAndContacts": "Delete list and contacts",
+      "deleted": "List \"{name}\" deleted.",
+      "deletedWithContacts": "List \"{name}\" and {count, number} {count, plural, =1 {contact} other {contacts}} deleted.",
+      "deleteFailed": "Could not delete the list.",
+      "adminOnly": "Only college admins can delete a list."
     }
   },
   "Pipelines": {
@@ -1052,7 +1101,8 @@
           "all": "Todos os contatos",
           "tags": "Filtrar por tags",
           "customField": "Campo personalizado",
-          "csv": "Enviar CSV"
+          "csv": "Enviar CSV",
+          "lists": "Contact lists"
         },
         "allDesc": "Enviar para todos os {count} contatos do seu banco de dados.",
         "allDescLoading": "Enviar para todos os contatos do seu banco de dados.",
@@ -1083,7 +1133,10 @@
         "audienceSummary": "Resumo do público",
         "calculating": "Calculando…",
         "estimatedRecipients": "destinatários estimados",
-        "selectTypeForEstimate": "Selecione um tipo de público para ver a estimativa."
+        "selectTypeForEstimate": "Selecione um tipo de público para ver a estimativa.",
+        "listsDesc": "Students in one or more contact lists",
+        "selectLists": "Select lists",
+        "noListsFound": "No lists yet. Import a sheet under Contacts to create one."
       },
       "personalize": {
         "title": "Personalizar variáveis",
@@ -1144,7 +1197,12 @@
         "estimatedReach": "Alcance estimado",
         "language": "Idioma",
         "confirmTitle": "Confirmar disparo",
-        "confirmDesc": "Você está prestes a enviar este disparo para <b>{count, number}</b> {count, plural, =1 {contato} other {contatos}} usando o modelo <b>{template}</b>. Esta ação não pode ser desfeita."
+        "confirmDesc": "Você está prestes a enviar este disparo para <b>{count, number}</b> {count, plural, =1 {contato} other {contatos}} usando o modelo <b>{template}</b>. Esta ação não pode ser desfeita.",
+        "audienceLists": "Contact lists",
+        "alreadySent": "{count, number} {count, plural, =1 {student} other {students}} in this audience already received the \"{template}\" template in an earlier campaign.",
+        "resendAlreadySent": "Send to {count, plural, =1 {this student} other {these {count, number} students}} again",
+        "resendOff": "Not ticked: they will be skipped, and only the others receive this message.",
+        "resendOn": "Ticked: they will receive this message again."
       }
     },
     "sending": {
@@ -1159,7 +1217,8 @@
       "fetchRecipientsFailed": "Falha ao buscar os destinatários do disparo",
       "apiRequestFailed": "Falha na requisição à API de disparo",
       "noPhoneOnContact": "O contato não tem número de telefone",
-      "unknownError": "Erro desconhecido"
+      "unknownError": "Erro desconhecido",
+      "allAlreadyReceived": "Everyone in this audience already received this template ({count, number} {count, plural, =1 {student} other {students}}). Tick \"send again\" on the last step to send it anyway."
     }
   },
   "Automations": {

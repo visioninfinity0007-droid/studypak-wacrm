@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { fetchAllInChunks, fetchAllPages } from '@/lib/supabase/paged-query';
 import { broadcastEligibility } from '@/lib/contacts/consent';
+import { normalizeKey } from '@/lib/contacts/dedupe';
 import type { Contact } from '@/types';
 
 export type CustomFieldOperator = 'is' | 'is_not' | 'contains';
@@ -12,7 +13,7 @@ export interface CustomFieldFilter {
   value: string;
 }
 
-export type AudienceType = 'all' | 'tags' | 'custom_field' | 'csv';
+export type AudienceType = 'all' | 'tags' | 'lists' | 'custom_field' | 'csv';
 
 export interface CsvAudienceRow {
   phone: string;
@@ -22,6 +23,8 @@ export interface CsvAudienceRow {
 export interface AudienceConfig {
   type: AudienceType;
   tagIds?: string[];
+  /** Contact lists (migration 066) for the 'lists' audience. */
+  listIds?: string[];
   customField?: CustomFieldFilter;
   csvContacts?: CsvAudienceRow[];
   excludeTagIds?: string[];
@@ -49,6 +52,27 @@ export function fetchTaggedContactIds(
           .select('contact_id')
           .in('tag_id', slice)
           .order('id')
+          .range(from, to),
+    );
+    return new Set(rows.map((row) => row.contact_id));
+  });
+}
+
+/** Contacts in any of the given contact lists (migration 066). */
+export function fetchListContactIds(
+  db: SupabaseClient,
+  listIds: readonly string[],
+): Promise<Set<string>> {
+  return withContext('contact lists', async () => {
+    const rows = await fetchAllInChunks<{ contact_id: string }, string>(
+      listIds,
+      (slice, from, to) =>
+        db
+          .from('contact_list_members')
+          .select('contact_id')
+          .in('list_id', slice)
+          .order('contact_id')
+          .order('list_id')
           .range(from, to),
     );
     return new Set(rows.map((row) => row.contact_id));
@@ -116,6 +140,9 @@ async function fetchAudienceContactIds(
 ): Promise<Set<string> | null> {
   if (audience.type === 'tags' && audience.tagIds && audience.tagIds.length > 0) {
     return fetchTaggedContactIds(db, audience.tagIds);
+  }
+  if (audience.type === 'lists' && audience.listIds && audience.listIds.length > 0) {
+    return fetchListContactIds(db, audience.listIds);
   }
   if (audience.type === 'custom_field' && hasCustomFieldFilter(audience)) {
     return fetchCustomFieldContactIds(db, audience.customField);
@@ -221,4 +248,75 @@ export async function countAudience(
     ),
   );
   return granted.length;
+}
+
+// ── Already received this template ─────────────────────────────────
+// Client request (2026-10-24): when the same students turn up in a new
+// sheet, don't send them a template they already got unless the sender
+// ticks "send to them again". "Got it" = a recipient row for that
+// template that actually went out (sent / delivered / read / replied);
+// failed and still-pending sends don't count.
+
+const RECEIVED_STATUSES = ['sent', 'delivered', 'read', 'replied'];
+
+/** Contacts that already received `templateName` in an earlier campaign. */
+export function fetchTemplateRecipientIds(
+  db: SupabaseClient,
+  templateName: string,
+): Promise<Set<string>> {
+  return withContext('earlier recipients', async () => {
+    const rows = await fetchAllPages<{ contact_id: string | null }>((from, to) =>
+      db
+        .from('broadcast_recipients')
+        .select('contact_id, broadcasts!inner(template_name)')
+        .eq('broadcasts.template_name', templateName)
+        .in('status', RECEIVED_STATUSES)
+        .not('contact_id', 'is', null)
+        .order('id')
+        .range(from, to),
+    );
+    return new Set(rows.map((row) => row.contact_id).filter((id): id is string => !!id));
+  });
+}
+
+/** Split an audience into contacts to send to and those already sent. */
+export function splitAlreadySent<T extends { id: string }>(
+  contacts: readonly T[],
+  alreadySentIds: ReadonlySet<string>,
+): { toSend: T[]; alreadySent: T[] } {
+  const toSend: T[] = [];
+  const alreadySent: T[] = [];
+  for (const contact of contacts) {
+    (alreadySentIds.has(contact.id) ? alreadySent : toSend).push(contact);
+  }
+  return { toSend, alreadySent };
+}
+
+/**
+ * Read-only CSV resolution for previews: the CSV numbers that are
+ * already contacts. (Sending creates the missing ones; a number that
+ * isn't a contact yet can't have received anything.)
+ */
+export function lookupCsvContacts(
+  db: SupabaseClient,
+  rows: readonly CsvAudienceRow[],
+): Promise<Contact[]> {
+  const keys = [...new Set(rows.map((row) => normalizeKey(row.phone)).filter(Boolean))];
+  return withContext('CSV contacts', () =>
+    fetchAllInChunks<Contact, string>(keys, (slice, from, to) =>
+      db.from('contacts').select('*').in('phone_normalized', slice).order('id').range(from, to),
+    ),
+  );
+}
+
+/** How many of this audience already received `templateName`. */
+export async function countAlreadySent(
+  db: SupabaseClient,
+  audience: AudienceConfig,
+  templateName: string,
+): Promise<number> {
+  const sentIds = await fetchTemplateRecipientIds(db, templateName);
+  if (sentIds.size === 0) return 0;
+  const contacts = await resolveAudienceContacts(db, audience, (rows) => lookupCsvContacts(db, rows));
+  return splitAlreadySent(contacts, sentIds).alreadySent.length;
 }

@@ -22,6 +22,16 @@ import {
   resolveImportTagIds,
   type ContactTagAssignment,
 } from '@/lib/contacts/resolve-import-tags';
+import {
+  buildDuplicateReport,
+  defaultListName,
+  duplicatesCsv,
+  listNameKey,
+  type DuplicateRow,
+  type ListMembership,
+  type MatchedContact,
+} from '@/lib/contacts/contact-lists';
+import { fetchAllInChunks, fetchAllPages } from '@/lib/supabase/paged-query';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -41,11 +51,16 @@ import {
   XCircle,
   AlertTriangle,
   Tag,
+  ListChecks,
+  Download,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const DEFAULT_TAG_COLOR = '#3b82f6';
 const PREVIEW_LIMIT = 5;
+const DUPLICATES_SHOWN = 200;
+
+type ListMode = 'new' | 'existing' | 'none';
 
 function truncateFilename(name: string, max = 48): string {
   if (name.length <= max) return name;
@@ -151,6 +166,11 @@ export function ImportModal({
   const [consentSource, setConsentSource] = useState('');
   const [consentEvidence, setConsentEvidence] = useState('');
   const [hasConsentColumn, setHasConsentColumn] = useState(false);
+  // Contact lists (migration 066): each upload is saved to a list.
+  const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
+  const [listMode, setListMode] = useState<ListMode>('new');
+  const [newListName, setNewListName] = useState('');
+  const [existingListId, setExistingListId] = useState('');
   const [result, setResult] = useState<{
     imported: number;
     skipped: number;
@@ -161,6 +181,9 @@ export function ImportModal({
     excluded: number;
     consentGranted: number;
     consentRecordedExisting: number;
+    listName: string | null;
+    addedToList: number;
+    duplicates: DuplicateRow[];
   } | null>(null);
 
   function reset() {
@@ -173,6 +196,9 @@ export function ImportModal({
     setHasTagsColumn(false);
     setHasCompanyColumn(false);
     setTagColorByKey(new Map());
+    setListMode('new');
+    setNewListName('');
+    setExistingListId('');
     setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -188,6 +214,12 @@ export function ImportModal({
 
     setFile(selected);
     setResult(null);
+    setNewListName(defaultListName(selected.name));
+    void supabase
+      .from('contact_lists')
+      .select('id, name')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setLists((data ?? []) as { id: string; name: string }[]));
 
     let parsed: ParseContactCsvResult;
     if (/\.xlsx$/i.test(selected.name)) {
@@ -255,6 +287,12 @@ export function ImportModal({
       if (consentAttested && !consentSource.trim()) {
         throw new Error(t('consentSourceRequired'));
       }
+      if (listMode === 'new' && !newListName.trim()) {
+        throw new Error(t('listNameRequired'));
+      }
+      if (listMode === 'existing' && !existingListId) {
+        throw new Error(t('listPickRequired'));
+      }
 
       let imported = 0;
       let skipped = 0;
@@ -296,40 +334,56 @@ export function ImportModal({
       } = dedupeByPhone(prepared);
       skipped += inFileDupes;
 
-      // 1b) Never import a number on the do-not-message list.
-      const { data: exclusionRows } = await supabase
-        .from('contact_exclusions')
-        .select('phone_normalized')
-        .eq('account_id', accountId);
-      const excludedKeys = new Set(
-        (exclusionRows ?? []).map((r) => (r as { phone_normalized: string }).phone_normalized)
+      // 1b) Never import a number on the do-not-message list. Paged:
+      //    a single read stops at the API's 1,000-row cap.
+      const exclusionRows = await fetchAllPages<{ phone_normalized: string }>((from, to) =>
+        supabase
+          .from('contact_exclusions')
+          .select('phone_normalized')
+          .eq('account_id', accountId)
+          .order('phone_normalized')
+          .range(from, to)
       );
+      const excludedKeys = new Set(exclusionRows.map((r) => r.phone_normalized));
 
-      // 2) Skip numbers already in this account. One read of the
-      //    generated `phone_normalized` column (migration 022) → Set.
-      const { data: existingRows } = await supabase
-        .from('contacts')
-        .select('phone_normalized')
-        .eq('account_id', accountId);
-      const existing = new Set(
-        (existingRows ?? [])
-          .map(
-            (r) => (r as { phone_normalized: string | null }).phone_normalized
-          )
-          .filter((p): p is string => !!p)
+      // 2) Numbers already in this account aren't created again — but
+      //    they are still added to this upload's list, and reported as
+      //    duplicates. Paged read of the generated `phone_normalized`
+      //    column (migration 022).
+      const existingRows = await fetchAllPages<{
+        id: string;
+        phone: string;
+        name: string | null;
+        phone_normalized: string | null;
+      }>((from, to) =>
+        supabase
+          .from('contacts')
+          .select('id, phone, name, phone_normalized')
+          .eq('account_id', accountId)
+          .order('id')
+          .range(from, to)
+      );
+      const existingByKey = new Map(
+        existingRows
+          .filter((r) => !!r.phone_normalized)
+          .map((r) => [r.phone_normalized as string, r])
       );
 
       // Existing contacts this import has consent for — recorded below
       // (only where nothing is recorded yet; never over a revocation).
       const existingConsentKeys: string[] = [];
+      const matched: MatchedContact[] = [];
+      const newContactIds: string[] = [];
       const toInsert = unique.filter((row) => {
         const key = normalizeKey(row.phone);
         if (excludedKeys.has(exclusionKey(row.phone))) {
           excluded++;
           return false;
         }
-        if (existing.has(key)) {
+        const found = existingByKey.get(key);
+        if (found) {
           skipped++;
+          matched.push({ contactId: found.id, phone: found.phone, name: found.name });
           if (consentFor(row) === true) existingConsentKeys.push(key);
           return false;
         }
@@ -397,6 +451,7 @@ export function ImportModal({
 
             if (!singleErr && singleData) {
               imported++;
+              newContactIds.push(singleData.id);
               if ('consent_status' in row && row.consent_status === 'granted') consentGranted++;
               if (source.tagNames.length > 0) {
                 tagAssignments.push({
@@ -429,6 +484,7 @@ export function ImportModal({
         } else {
           const inserted = data ?? [];
           imported += inserted.length;
+          for (const row of inserted) newContactIds.push(row.id);
           consentGranted += rows.filter(
             (r) => 'consent_status' in r && r.consent_status === 'granted'
           ).length;
@@ -480,6 +536,79 @@ export function ImportModal({
         consentRecordedExisting += updated?.length ?? 0;
       }
 
+      // 7) Save this upload to its list and report the numbers that
+      //    were already contacts, with the lists they're already in.
+      //    A failure here must not mask a successful import.
+      let targetListId: string | null = null;
+      let listName: string | null = null;
+      let addedToList = 0;
+      let duplicates: DuplicateRow[] = [];
+      try {
+        if (listMode === 'existing') {
+          targetListId = existingListId;
+          listName = lists.find((l) => l.id === existingListId)?.name ?? null;
+        } else if (listMode === 'new') {
+          const name = newListName.trim();
+          const { data: created, error: listErr } = await supabase
+            .from('contact_lists')
+            .insert({ account_id: accountId, name, created_by: user.id })
+            .select('id, name')
+            .single();
+          if (created) {
+            targetListId = created.id;
+            listName = created.name;
+          } else if (isUniqueViolation(listErr)) {
+            // A list with this name exists — add to it.
+            const { data: all } = await supabase.from('contact_lists').select('id, name');
+            const same = (all ?? []).find((l) => listNameKey(l.name) === listNameKey(name));
+            if (!same) throw listErr;
+            targetListId = same.id;
+            listName = same.name;
+          } else {
+            throw listErr;
+          }
+        }
+
+        const memberships: ListMembership[] = (
+          await fetchAllInChunks<
+            { contact_id: string; list_id: string; contact_lists: { name: string } | { name: string }[] | null },
+            string
+          >(
+            matched.map((m) => m.contactId),
+            (slice, from, to) =>
+              supabase
+                .from('contact_list_members')
+                .select('contact_id, list_id, contact_lists(name)')
+                .in('contact_id', slice)
+                .order('contact_id')
+                .order('list_id')
+                .range(from, to)
+          )
+        ).map((m) => {
+          const list = Array.isArray(m.contact_lists) ? m.contact_lists[0] : m.contact_lists;
+          return { contactId: m.contact_id, listId: m.list_id, listName: list?.name ?? '' };
+        });
+        duplicates = buildDuplicateReport(matched, memberships, targetListId);
+
+        if (targetListId) {
+          const listId = targetListId;
+          const ids = [...new Set([...newContactIds, ...matched.map((m) => m.contactId)])];
+          for (let i = 0; i < ids.length; i += 500) {
+            const { error: memberErr } = await supabase
+              .from('contact_list_members')
+              .upsert(
+                ids.slice(i, i + 500).map((contactId) => ({ list_id: listId, contact_id: contactId })),
+                { onConflict: 'list_id,contact_id', ignoreDuplicates: true }
+              );
+            if (memberErr) throw memberErr;
+          }
+          addedToList = ids.length;
+        }
+      } catch (listErr) {
+        console.error('[contacts import] list step failed:', listErr);
+        toast.warning(t('toastListFailed'));
+      }
+
       setResult({
         imported,
         skipped,
@@ -490,11 +619,14 @@ export function ImportModal({
         excluded,
         consentGranted,
         consentRecordedExisting,
+        listName,
+        addedToList,
+        duplicates,
       });
       if (imported > 0) {
         toast.success(t('toastImported', { count: imported }));
-        onImported();
       }
+      if (imported > 0 || addedToList > 0) onImported();
       if (tagsAssigned > 0) {
         toast.success(t('toastTagsAssigned', { count: tagsAssigned }));
       }
@@ -660,6 +792,46 @@ export function ImportModal({
               <p className="text-xs text-muted-foreground">
                 {hasConsentColumn ? t('consentColumnHint') : t('consentHint')}
               </p>
+
+              <div className="space-y-2 border-t border-border/80 pt-3">
+                <label className="flex flex-wrap items-center gap-2">
+                  <ListChecks className="size-4 text-primary" />
+                  <span className="text-muted-foreground">{t('listLabel')}</span>
+                  <select
+                    value={listMode}
+                    onChange={(e) => setListMode(e.target.value as ListMode)}
+                    className="rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+                  >
+                    <option value="new">{t('listModeNew')}</option>
+                    <option value="existing" disabled={lists.length === 0}>{t('listModeExisting')}</option>
+                    <option value="none">{t('listModeNone')}</option>
+                  </select>
+                </label>
+                {listMode === 'new' && (
+                  <input
+                    aria-label={t('listNameLabel')}
+                    placeholder={t('listNameLabel')}
+                    value={newListName}
+                    maxLength={120}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    className="w-full rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+                  />
+                )}
+                {listMode === 'existing' && (
+                  <select
+                    aria-label={t('listPickLabel')}
+                    value={existingListId}
+                    onChange={(e) => setExistingListId(e.target.value)}
+                    className="w-full rounded-md border border-border bg-muted px-2 py-1 text-foreground"
+                  >
+                    <option value="">{t('listPickLabel')}</option>
+                    {lists.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-xs text-muted-foreground">{t('listHint')}</p>
+              </div>
             </div>
           )}
         </div>
@@ -821,6 +993,17 @@ export function ImportModal({
                 </p>
               )}
 
+              {result.listName && result.addedToList > 0 && (
+                <p className="text-primary mt-3 flex items-center gap-1.5 text-sm">
+                  <ListChecks className="size-4 shrink-0" />
+                  {t('resultList', { count: result.addedToList, list: result.listName })}
+                </p>
+              )}
+
+              {result.duplicates.length > 0 && (
+                <DuplicatesReport rows={result.duplicates} fileName={file?.name ?? 'contacts'} />
+              )}
+
               {result.failedDetails.length > 0 && (
                 <div className="mt-3 space-y-1 border-t border-border/80 pt-3">
                   <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
@@ -860,7 +1043,9 @@ export function ImportModal({
               disabled={
                 parsedRows.length === 0 ||
                 importing ||
-                (consentAttested && !consentSource.trim())
+                (consentAttested && !consentSource.trim()) ||
+                (listMode === 'new' && !newListName.trim()) ||
+                (listMode === 'existing' && !existingListId)
               }
               onClick={handleImport}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -872,5 +1057,71 @@ export function ImportModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Numbers in the upload that were already contacts, and their lists. */
+function DuplicatesReport({ rows, fileName }: { rows: DuplicateRow[]; fileName: string }) {
+  const t = useTranslations('Contacts.importModal');
+  const inOtherLists = rows.filter((r) => r.otherLists.length > 0).length;
+
+  function download() {
+    const csv = duplicatesCsv(rows, [t('dupColPhone'), t('dupColName'), t('dupColLists')]);
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `duplicates - ${defaultListName(fileName)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-border/80 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-popover-foreground">
+            {t('dupTitle', { count: rows.length })}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('dupSummary', { inLists: inOtherLists, count: rows.length })}
+          </p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={download}>
+          <Download className="size-4" />
+          {t('dupDownload')}
+        </Button>
+      </div>
+      <div className="max-h-48 overflow-y-auto rounded-lg border border-border">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-background">
+            <tr className="border-b border-border">
+              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">{t('dupColPhone')}</th>
+              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">{t('dupColName')}</th>
+              <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">{t('dupColLists')}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/70">
+            {rows.slice(0, DUPLICATES_SHOWN).map((r) => (
+              <tr key={r.phone}>
+                <td className="px-3 py-1.5 font-mono text-[11px] whitespace-nowrap text-popover-foreground">{r.phone}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">{r.name || '—'}</td>
+                <td className="px-3 py-1.5 text-muted-foreground">
+                  {r.otherLists.length > 0
+                    ? r.otherLists.join(', ')
+                    : r.inTargetList
+                      ? t('dupAlreadyInThisList')
+                      : t('dupNoList')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > DUPLICATES_SHOWN && (
+        <p className="text-[11px] text-muted-foreground">
+          {t('dupMore', { count: rows.length - DUPLICATES_SHOWN })}
+        </p>
+      )}
+    </div>
   );
 }

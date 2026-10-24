@@ -51,12 +51,18 @@ import {
   X,
   Ban,
   ShieldCheck,
+  ListChecks,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
 import { RecordConsentDialog } from '@/components/contacts/record-consent-dialog';
 import { ExclusionsDialog } from '@/components/contacts/exclusions-dialog';
+import {
+  ListsDialog,
+  loadContactLists,
+  type ContactListSummary,
+} from '@/components/contacts/lists-dialog';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
@@ -82,6 +88,10 @@ export default function ContactsPage() {
   const [totalCount, setTotalCount] = useState(0);
   // Tag filter — contacts shown must have ANY of these tags (OR).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  // Contact-list filter (migration 066). '' = all contacts.
+  const [selectedListId, setSelectedListId] = useState('');
+  const [lists, setLists] = useState<ContactListSummary[]>([]);
+  const [listsOpen, setListsOpen] = useState(false);
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -125,6 +135,17 @@ export default function ContactsPage() {
     }
   }, [supabase]);
 
+  const fetchLists = useCallback(async () => {
+    try {
+      const next = await loadContactLists();
+      setLists(next);
+      // A deleted list can't stay selected.
+      setSelectedListId((prev) => (prev && !next.some((l) => l.id === prev) ? '' : prev));
+    } catch {
+      // Lists are optional on this page; the contacts still load.
+    }
+  }, []);
+
   const fetchContacts = useCallback(async () => {
     const seq = ++fetchSeq.current;
     setLoading(true);
@@ -140,7 +161,7 @@ export default function ContactsPage() {
     let contactRows: Contact[];
     let count: number;
 
-    if (selectedTagIds.length > 0) {
+    if (selectedTagIds.length > 0 && !selectedListId) {
       // Tag filter active — resolve it server-side (join + distinct +
       // windowed total count + pagination) so a tag covering many
       // contacts can't silently truncate the result or overflow an IN
@@ -161,11 +182,18 @@ export default function ContactsPage() {
       contactRows = rows.map((r) => r.contact);
       count = rows.length > 0 ? Number(rows[0].total_count) : 0;
     } else {
-      let query = supabase
-        .from('contacts')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(from, to);
+      let query = selectedListId
+        ? supabase
+            .from('contacts')
+            .select('*, contact_list_members!inner(list_id)', { count: 'exact' })
+            .eq('contact_list_members.list_id', selectedListId)
+            .order('created_at', { ascending: false })
+            .range(from, to)
+        : supabase
+            .from('contacts')
+            .select('*', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(from, to);
 
       if (term) {
         const like = `%${term}%`;
@@ -179,7 +207,12 @@ export default function ContactsPage() {
         setLoading(false);
         return;
       }
-      contactRows = data ?? [];
+      // Drop the join column the list filter adds.
+      contactRows = (data ?? []).map((row) => {
+        const { contact_list_members: _members, ...contact } = row as Contact & { contact_list_members?: unknown };
+        void _members;
+        return contact as Contact;
+      });
       count = exactCount ?? 0;
     }
 
@@ -214,7 +247,7 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, selectedTagIds, tagsMap, t]);
+  }, [supabase, page, search, selectedTagIds, selectedListId, tagsMap, t]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -229,6 +262,11 @@ export default function ContactsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchContacts();
   }, [fetchContacts]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchLists();
+  }, [fetchLists]);
 
   function openAddForm() {
     setEditContact(null);
@@ -369,6 +407,14 @@ export default function ContactsPage() {
           )}
           <Button
             variant="outline"
+            onClick={() => setListsOpen(true)}
+            className="border-border text-muted-foreground hover:bg-muted"
+          >
+            <ListChecks className="size-4" />
+            {t('listsBtn')}
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => setExclusionsOpen(true)}
             className="border-border text-muted-foreground hover:bg-muted"
           >
@@ -425,8 +471,28 @@ export default function ContactsPage() {
             />
           </div>
 
+          <select
+            aria-label={t('filterByList')}
+            value={selectedListId}
+            onChange={(e) => {
+              setSelectedListId(e.target.value);
+              // Lists and tags don't combine; a list replaces the tag filter.
+              if (e.target.value) setSelectedTagIds([]);
+              setPage(0);
+            }}
+            className="h-9 shrink-0 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+          >
+            <option value="">{t('allLists')}</option>
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {t('listOption', { name: l.name, count: l.size })}
+              </option>
+            ))}
+          </select>
+
           <Popover>
             <PopoverTrigger
+              disabled={!!selectedListId}
               render={
                 <Button
                   variant="outline"
@@ -807,7 +873,10 @@ export default function ContactsPage() {
       <ImportModal
         open={importOpen}
         onOpenChange={setImportOpen}
-        onImported={fetchContacts}
+        onImported={() => {
+          fetchContacts();
+          fetchLists();
+        }}
       />
 
       {/* Custom Fields Manager (admin+) */}
@@ -853,6 +922,15 @@ export default function ContactsPage() {
         selectedIds={[...selected]}
         onDone={() => {
           setSelected(new Set());
+          fetchContacts();
+        }}
+      />
+      <ListsDialog
+        open={listsOpen}
+        onOpenChange={setListsOpen}
+        lists={lists}
+        onChanged={() => {
+          fetchLists();
           fetchContacts();
         }}
       />

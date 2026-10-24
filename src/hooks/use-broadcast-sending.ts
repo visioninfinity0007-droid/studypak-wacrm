@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import {
+  fetchTemplateRecipientIds,
   resolveAudienceContacts,
+  splitAlreadySent,
   type AudienceConfig,
 } from '@/lib/broadcast-audience';
 import { normalizeKey } from '@/lib/contacts/dedupe';
@@ -42,6 +44,11 @@ interface BroadcastPayload {
    * falls back to the template's stored URL only when this is empty.
    */
   headerMediaUrl?: string;
+  /**
+   * Also send to contacts that already received this template in an
+   * earlier campaign. Off by default: they are skipped.
+   */
+  resendAlreadySent?: boolean;
 }
 
 interface UseBroadcastSendingReturn {
@@ -270,10 +277,24 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       // ── Step 1: Resolve audience contacts ─────────────────────────
       setProgress(5);
-      const contacts = await resolveAudience(payload.audience);
+      const audienceContacts = await resolveAudience(payload.audience);
 
-      if (contacts.length === 0) {
+      if (audienceContacts.length === 0) {
         throw new Error(t('noContactsForAudience'));
+      }
+
+      // Skip students who already got this template, unless the sender
+      // ticked "send to them again" on the last step.
+      let contacts = audienceContacts;
+      let skippedAlreadySent = 0;
+      if (!payload.resendAlreadySent) {
+        const sentIds = await fetchTemplateRecipientIds(supabase, payload.template.name);
+        const split = splitAlreadySent(audienceContacts, sentIds);
+        contacts = split.toSend;
+        skippedAlreadySent = split.alreadySent.length;
+        if (contacts.length === 0) {
+          throw new Error(t('allAlreadyReceived', { count: skippedAlreadySent }));
+        }
       }
 
       // ── Step 2: Create broadcast row ──────────────────────────────
@@ -290,8 +311,11 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           audience_filter: {
             type: payload.audience.type,
             tagIds: payload.audience.tagIds,
+            listIds: payload.audience.listIds,
             customField: payload.audience.customField,
             excludeTagIds: payload.audience.excludeTagIds,
+            resendAlreadySent: Boolean(payload.resendAlreadySent),
+            skippedAlreadySent,
           },
           // 'draft' until every recipient row exists — the queue route
           // flips it to 'sending', so the worker can't start (and finish)
