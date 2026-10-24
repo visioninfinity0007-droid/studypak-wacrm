@@ -47,8 +47,9 @@ describe('buildDuplicateReport', () => {
   });
 
   it('counts every list as "other" when importing without a list', () => {
-    const [first] = buildDuplicateReport(matched, memberships, null);
-    expect(first.otherLists).toEqual(['Lahore Nov', 'Rawalpindi Oct']);
+    const report = buildDuplicateReport(matched, memberships, null);
+    expect(report.find((r) => r.phone === '+923001110002')?.otherLists).toEqual(['Lahore Nov', 'Rawalpindi Oct']);
+    expect(report.find((r) => r.phone === '+923001110000')).toMatchObject({ otherLists: ['This upload'], inTargetList: false });
   });
 });
 
