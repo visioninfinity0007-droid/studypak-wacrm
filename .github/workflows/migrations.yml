@@ -80,3 +80,9 @@ jobs:
       # number can't be re-consented, and exclusions are per college.
       - name: Verify consent and exclusions
         run: supabase db query --local --file supabase/ci/verify-consent-exclusions.sql
+
+      # Contact lists (migration 066): per-college lists, membership
+      # guard, admin-only list delete, delete-with-contacts keeps
+      # contacts that are in another list.
+      - name: Verify contact lists
+        run: supabase db query --local --file supabase/ci/verify-contact-lists.sql

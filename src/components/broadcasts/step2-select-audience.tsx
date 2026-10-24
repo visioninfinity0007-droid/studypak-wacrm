@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import {
   Users,
   Tags,
+  ListChecks,
   Filter,
   Upload,
   FileText,
@@ -20,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-type AudienceType = 'all' | 'tags' | 'custom_field' | 'csv';
+type AudienceType = 'all' | 'tags' | 'lists' | 'custom_field' | 'csv';
 type CustomFieldOperator = 'is' | 'is_not' | 'contains';
 
 interface CustomFieldFilter {
@@ -32,6 +33,7 @@ interface CustomFieldFilter {
 interface AudienceConfig {
   type: AudienceType;
   tagIds?: string[];
+  listIds?: string[];
   customField?: CustomFieldFilter;
   csvContacts?: { phone: string; name?: string }[];
   excludeTagIds?: string[];
@@ -77,6 +79,12 @@ export function Step2SelectAudience({
       icon: Tags,
     },
     {
+      type: 'lists',
+      label: t('selectAudience.method.lists'),
+      description: t('selectAudience.listsDesc'),
+      icon: ListChecks,
+    },
+    {
       type: 'custom_field',
       label: t('selectAudience.method.customField'),
       description: t('selectAudience.customFieldDesc'),
@@ -90,6 +98,7 @@ export function Step2SelectAudience({
     },
   ], [t]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [lists, setLists] = useState<{ id: string; name: string; size: number }[] | null>(null);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingFields, setLoadingFields] = useState(false);
@@ -122,6 +131,29 @@ export function Step2SelectAudience({
     fetchTags();
   }, []);
 
+  // Contact lists (migration 066), with their sizes, once the type is picked.
+  useEffect(() => {
+    if (audience.type !== 'lists' || lists !== null) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await createClient()
+        .from('contact_lists')
+        .select('id, name, contact_list_members(count)')
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      setLists(
+        ((data ?? []) as { id: string; name: string; contact_list_members: { count: number }[] }[]).map((l) => ({
+          id: l.id,
+          name: l.name,
+          size: l.contact_list_members?.[0]?.count ?? 0,
+        })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audience.type, lists]);
+
   // Lazy-load custom fields only when that audience type is active.
   useEffect(() => {
     if (audience.type !== 'custom_field') return;
@@ -148,6 +180,7 @@ export function Step2SelectAudience({
         await countAudience(createClient(), {
           type: audience.type,
           tagIds: audience.tagIds,
+          listIds: audience.listIds,
           customField: audience.customField,
           csvContacts: audience.csvContacts,
           excludeTagIds: audience.excludeTagIds,
@@ -161,6 +194,7 @@ export function Step2SelectAudience({
   }, [
     audience.type,
     audience.tagIds,
+    audience.listIds,
     audience.customField,
     audience.csvContacts,
     audience.excludeTagIds,
@@ -211,6 +245,14 @@ export function Step2SelectAudience({
     onUpdate({ ...audience, tagIds: updated });
   }
 
+  function toggleList(listId: string) {
+    const current = audience.listIds ?? [];
+    const updated = current.includes(listId)
+      ? current.filter((id) => id !== listId)
+      : [...current, listId];
+    onUpdate({ ...audience, listIds: updated });
+  }
+
   function toggleExcludeTag(tagId: string) {
     const current = audience.excludeTagIds ?? [];
     const updated = current.includes(tagId)
@@ -231,6 +273,7 @@ export function Step2SelectAudience({
   const isValid =
     audience.type === 'all' ||
     (audience.type === 'tags' && audience.tagIds && audience.tagIds.length > 0) ||
+    (audience.type === 'lists' && audience.listIds && audience.listIds.length > 0) ||
     (audience.type === 'custom_field' &&
       !!audience.customField?.fieldId &&
       audience.customField.value.length > 0) ||
@@ -261,6 +304,7 @@ export function Step2SelectAudience({
                   // Wipe shape fields from other types to avoid stale
                   // config leaking across selections.
                   tagIds: option.type === 'tags' ? audience.tagIds : undefined,
+                  listIds: option.type === 'lists' ? audience.listIds : undefined,
                   customField:
                     option.type === 'custom_field'
                       ? audience.customField
@@ -323,6 +367,37 @@ export function Step2SelectAudience({
                       style={{ backgroundColor: tag.color }}
                     />
                     {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {audience.type === 'lists' && (
+        <div className="rounded-xl border border-border bg-card/50 p-4">
+          <p className="mb-3 text-sm font-medium text-foreground">{t('selectAudience.selectLists')}</p>
+          {lists === null ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          ) : lists.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t('selectAudience.noListsFound')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {lists.map((list) => {
+                const isSelected = audience.listIds?.includes(list.id);
+                return (
+                  <button
+                    key={list.id}
+                    onClick={() => toggleList(list.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                      isSelected
+                        ? 'border-primary/30 bg-primary/10 text-primary'
+                        : 'border-border bg-muted text-muted-foreground hover:border-border'
+                    }`}
+                  >
+                    {list.name}
+                    <span className="tabular-nums opacity-70">{list.size.toLocaleString()}</span>
                   </button>
                 );
               })}

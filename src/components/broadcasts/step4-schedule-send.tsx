@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
+import { countAlreadySent, countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { estimateBroadcastCost } from '@/lib/broadcast-cost';
@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface Step4Props {
@@ -25,6 +25,9 @@ interface Step4Props {
   onNameChange: (name: string) => void;
   template: MessageTemplate;
   audience: AudienceConfig;
+  /** Also send to students who already received this template. */
+  resendAlreadySent: boolean;
+  onResendAlreadySentChange: (resend: boolean) => void;
   onSend: () => void;
   onSaveDraft?: () => void;
   onBack: () => void;
@@ -37,6 +40,8 @@ export function Step4ScheduleSend({
   onNameChange,
   template,
   audience,
+  resendAlreadySent,
+  onResendAlreadySentChange,
   onSend,
   onSaveDraft,
   onBack,
@@ -51,6 +56,25 @@ export function Step4ScheduleSend({
   const [showConfirm, setShowConfirm] = useState(false);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
+  // Students in this audience who already received this template —
+  // skipped unless the box below is ticked. null while counting.
+  const [alreadySent, setAlreadySent] = useState<{ key: string; count: number } | null>(null);
+  const alreadySentKey = `${template.name}|${JSON.stringify(audience)}`;
+  const alreadySentCount = alreadySent?.key === alreadySentKey ? alreadySent.count : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    countAlreadySent(createClient(), audience, template.name)
+      .then((count) => {
+        if (!cancelled) setAlreadySent({ key: alreadySentKey, count });
+      })
+      .catch(() => {
+        if (!cancelled) setAlreadySent({ key: alreadySentKey, count: 0 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [audience, template.name, alreadySentKey]);
 
   useEffect(() => {
     async function calculateReach() {
@@ -92,9 +116,11 @@ export function Step4ScheduleSend({
     return () => { active = false; };
   }, [accountId]);
 
-  const costEstimate = loadingReach || loadingRate
+  const skipped = resendAlreadySent ? 0 : alreadySentCount ?? 0;
+  const sendReach = Math.max(0, estimatedReach - skipped);
+  const costEstimate = loadingReach || loadingRate || alreadySentCount === null
     ? null
-    : estimateBroadcastCost(estimatedReach, ratePkr);
+    : estimateBroadcastCost(sendReach, ratePkr);
   const costIsConfigured = ratePkr !== null && !loadingRate && !rateError;
 
   const audienceLabel =
@@ -102,6 +128,8 @@ export function Step4ScheduleSend({
       ? t('scheduleSend.audienceAll')
       : audience.type === 'tags'
         ? t('scheduleSend.audienceTags')
+        : audience.type === 'lists'
+          ? t('scheduleSend.audienceLists')
         : audience.type === 'csv'
           ? t('scheduleSend.audienceCsv')
           : t('scheduleSend.audienceField');
@@ -146,7 +174,7 @@ export function Step4ScheduleSend({
               ) : (
                 <>
                   <Users className="h-3.5 w-3.5 text-primary" />
-                  <p className="font-medium text-foreground">{estimatedReach.toLocaleString()}</p>
+                  <p className="font-medium text-foreground">{sendReach.toLocaleString()}</p>
                 </>
               )}
             </div>
@@ -157,6 +185,29 @@ export function Step4ScheduleSend({
           </div>
         </div>
       </div>
+
+      {/* Already received this template: skipped unless ticked. */}
+      {alreadySentCount !== null && alreadySentCount > 0 && (
+        <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <p className="text-sm text-foreground">
+              {t('scheduleSend.alreadySent', { count: alreadySentCount, template: template.name })}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 pl-6 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={resendAlreadySent}
+              onChange={(e) => onResendAlreadySentChange(e.target.checked)}
+            />
+            {t('scheduleSend.resendAlreadySent', { count: alreadySentCount })}
+          </label>
+          <p className="pl-6 text-xs text-muted-foreground">
+            {resendAlreadySent ? t('scheduleSend.resendOn') : t('scheduleSend.resendOff')}
+          </p>
+        </div>
+      )}
 
       {/* Indicative pricing: a configurable rate, not Meta's live rate card. */}
       <div className="space-y-2 rounded-xl border border-border p-4">
@@ -235,7 +286,7 @@ export function Step4ScheduleSend({
               <DialogTitle className="text-popover-foreground">{t('scheduleSend.confirmTitle')}</DialogTitle>
               <DialogDescription className="text-muted-foreground">
                 {t.rich('scheduleSend.confirmDesc', {
-                  count: estimatedReach,
+                  count: sendReach,
                   template: template.name,
                   b: (chunks) => (
                     <span className="font-medium text-popover-foreground">{chunks}</span>

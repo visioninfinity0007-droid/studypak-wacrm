@@ -30,8 +30,9 @@ export default function NewBroadcastPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [template, setTemplate] = useState<MessageTemplate | null>(null);
   const [audience, setAudience] = useState<{
-    type: 'all' | 'tags' | 'custom_field' | 'csv';
+    type: 'all' | 'tags' | 'lists' | 'custom_field' | 'csv';
     tagIds?: string[];
+    listIds?: string[];
     customField?: {
       fieldId: string;
       operator: 'is' | 'is_not' | 'contains';
@@ -45,6 +46,8 @@ export default function NewBroadcastPage() {
   >({});
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
+  // Off = skip students who already received this template.
+  const [resendAlreadySent, setResendAlreadySent] = useState(false);
 
   async function handleSend() {
     if (!template) return;
@@ -56,12 +59,14 @@ export default function NewBroadcastPage() {
         audience: {
           type: audience.type,
           tagIds: audience.tagIds,
+          listIds: audience.listIds,
           customField: audience.customField,
           csvContacts: audience.csvContacts,
           excludeTagIds: audience.excludeTagIds,
         },
         variables,
         headerMediaUrl,
+        resendAlreadySent,
       });
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
@@ -111,6 +116,7 @@ export default function NewBroadcastPage() {
       audience_filter: {
         type: audience.type,
         tagIds: audience.tagIds,
+        listIds: audience.listIds,
       },
       status: 'draft',
       total_recipients: 0,
@@ -220,6 +226,8 @@ export default function NewBroadcastPage() {
               name={name}
               onNameChange={setName}
               template={template}
+              resendAlreadySent={resendAlreadySent}
+              onResendAlreadySentChange={setResendAlreadySent}
               audience={audience}
               onSend={handleSend}
               onSaveDraft={handleSaveDraft}
