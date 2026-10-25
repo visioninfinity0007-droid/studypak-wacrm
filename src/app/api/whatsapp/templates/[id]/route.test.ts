@@ -101,6 +101,7 @@ vi.mock('@/lib/whatsapp/encryption', () => ({
 const meta = vi.hoisted(() => ({
   editMessageTemplate: vi.fn(async () => ({})),
   deleteMessageTemplate: vi.fn(async () => ({})),
+  isTemplateOnWaba: vi.fn(async () => true),
 }))
 vi.mock('@/lib/whatsapp/meta-api', () => meta)
 
@@ -136,7 +137,9 @@ beforeEach(() => {
   callerRole = 'admin'
   supabaseMock = makeSupabaseMock()
   meta.editMessageTemplate.mockClear()
-  meta.deleteMessageTemplate.mockClear()
+  meta.deleteMessageTemplate.mockReset()
+  meta.isTemplateOnWaba.mockReset()
+  meta.isTemplateOnWaba.mockResolvedValue(true)
 })
 
 describe('template lifecycle role gate (GHSA-m4fx-g6pr-hrw8)', () => {
@@ -181,5 +184,31 @@ describe('template lifecycle rate limit', () => {
     expect(limited.status).toBe(429)
     expect(limited.headers.get('Retry-After')).toMatch(/^\d+$/)
     expect(meta.deleteMessageTemplate).not.toHaveBeenCalled()
+  })
+})
+
+describe('deleting a template from an old WhatsApp account', () => {
+  it('removes the local row when Meta refuses and the template is not on the current WABA', async () => {
+    meta.deleteMessageTemplate.mockRejectedValueOnce(new Error('(#100) Need permission on either WhatsApp Business Account'))
+    meta.isTemplateOnWaba.mockResolvedValueOnce(false)
+    const res = await DELETE(new Request('http://localhost/t'), { params })
+    expect(res.status).toBe(200)
+    expect(templateDeletes).toBe(1)
+  })
+
+  it('keeps the row and reports the error when the template is on the current WABA', async () => {
+    meta.deleteMessageTemplate.mockRejectedValueOnce(new Error('Template is in use'))
+    const res = await DELETE(new Request('http://localhost/t'), { params })
+    expect(res.status).toBe(502)
+    expect((await res.json()).error).toBe('Template is in use')
+    expect(templateDeletes).toBe(0)
+  })
+
+  it('keeps the row when the WABA check itself fails', async () => {
+    meta.deleteMessageTemplate.mockRejectedValueOnce(new Error('Meta is down'))
+    meta.isTemplateOnWaba.mockRejectedValueOnce(new Error('still down'))
+    const res = await DELETE(new Request('http://localhost/t'), { params })
+    expect(res.status).toBe(502)
+    expect(templateDeletes).toBe(0)
   })
 })

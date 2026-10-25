@@ -9,6 +9,7 @@ import { decrypt } from '@/lib/whatsapp/encryption'
 import {
   deleteMessageTemplate,
   editMessageTemplate,
+  isTemplateOnWaba,
 } from '@/lib/whatsapp/meta-api'
 import {
   validateTemplatePayload,
@@ -276,16 +277,24 @@ export async function DELETE(
         )
       }
       const accessToken = decrypt(config.access_token)
+      const target = {
+        wabaId: config.waba_id,
+        accessToken,
+        name: existing.name,
+        metaTemplateId: existing.meta_template_id,
+      }
       try {
-        await deleteMessageTemplate({
-          wabaId: config.waba_id,
-          accessToken,
-          name: existing.name,
-          metaTemplateId: existing.meta_template_id,
-        })
+        await deleteMessageTemplate(target)
       } catch (e) {
-        const message = e instanceof Error ? e.message : t('templates.metaDeleteFailed')
-        return NextResponse.json({ error: message }, { status: 502 })
+        // A template synced from a WhatsApp account the college no longer
+        // uses isn't on the current WABA, and Meta answers the delete with
+        // "(#100) Need permission on either WhatsApp Business Account…".
+        // Nothing can be sent with it from here, so drop the local row.
+        const elsewhere = await isTemplateOnWaba(target).then((on) => !on, () => false)
+        if (!elsewhere) {
+          const message = e instanceof Error ? e.message : t('templates.metaDeleteFailed')
+          return NextResponse.json({ error: message }, { status: 502 })
+        }
       }
     }
 
