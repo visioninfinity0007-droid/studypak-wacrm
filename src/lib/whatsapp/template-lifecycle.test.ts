@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteMessageTemplate,
+  isTemplateOnWaba,
   editMessageTemplate,
   submitMessageTemplate,
 } from './meta-api';
@@ -220,5 +221,28 @@ describe('deleteMessageTemplate', () => {
         metaTemplateId: 'y',
       }),
     ).rejects.toThrow(/boom/);
+  });
+});
+
+describe('isTemplateOnWaba', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('matches the exact template id, not a partial name match', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      okResponse({ data: [{ id: '4124506101187019', name: '1st_watim_message_template' }] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const args = { wabaId: 'W', accessToken: 't', name: '1st_watim' };
+    expect(await isTemplateOnWaba({ ...args, metaTemplateId: '4124506101187019' })).toBe(true);
+    expect(await isTemplateOnWaba({ ...args, metaTemplateId: '1420738796867796' })).toBe(false);
+    expect(await isTemplateOnWaba(args)).toBe(false);
+    expect(fetchMock.mock.calls[0][0]).toContain('/W/message_templates?name=1st_watim');
+  });
+
+  it('throws when Meta errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(errorResponse(500, { error: { message: 'boom' } })));
+    await expect(isTemplateOnWaba({ wabaId: 'W', accessToken: 't', name: 'x' })).rejects.toThrow(/boom/);
   });
 });

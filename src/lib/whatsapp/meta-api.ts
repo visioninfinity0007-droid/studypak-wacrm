@@ -818,6 +818,29 @@ export async function deleteMessageTemplate(
   }
 }
 
+/**
+ * Is this template on the given WABA? Meta's `name` filter matches
+ * partial names, so the result is narrowed to the exact template id
+ * (or exact name when the row has no id).
+ */
+export async function isTemplateOnWaba(
+  args: DeleteMessageTemplateArgs
+): Promise<boolean> {
+  const { wabaId, accessToken, name, metaTemplateId } = args
+  const params = new URLSearchParams({ name, fields: 'id,name', limit: '100' })
+  const url = `${META_API_BASE}/${wabaId}/message_templates?${params.toString()}`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const body = (await response.json()) as { data?: { id: string; name: string }[] }
+  return (body.data ?? []).some((t) =>
+    metaTemplateId ? t.id === metaTemplateId : t.name === name
+  )
+}
+
 // ============================================================
 // Reactions
 // ============================================================
