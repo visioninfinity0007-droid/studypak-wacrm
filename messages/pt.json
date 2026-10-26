@@ -1065,7 +1065,10 @@
       "queueSendingTitle": "Sending in the background",
       "queueSendingHint": "{count} recipients are queued. Sending continues on the server — you can close this page. Temporary WhatsApp errors are retried automatically.",
       "queueSendNow": "Send now",
-      "toastQueueNudged": "Sending started on the server."
+      "toastQueueNudged": "Sending started on the server.",
+      "continueDraft": "Continue",
+      "continueDraftHover": "Open this draft to review and send it",
+      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send."
     },
     "new": {
       "title": "Novo disparo",
@@ -1081,7 +1084,11 @@
       "toastNotLinked": "Seu perfil não está vinculado a uma conta.",
       "toastFailedDraft": "Falha ao salvar o rascunho: {error}",
       "toastDraftSaved": "Rascunho salvo",
-      "broadcastFailed": "Falha no disparo"
+      "broadcastFailed": "Falha no disparo",
+      "draftLoading": "Loading draft…",
+      "draftNotFound": "This draft no longer exists or has already been sent.",
+      "draftTemplateMissing": "Template “{name}” is no longer approved. Choose a template to continue.",
+      "continuingDraft": "Continuing draft “{name}”. Review and press Send now."
     },
     "wizard": {
       "next": "Avançar",

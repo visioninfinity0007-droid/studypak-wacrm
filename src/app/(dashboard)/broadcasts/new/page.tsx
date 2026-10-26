@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
@@ -11,7 +11,7 @@ import { Step2SelectAudience } from '@/components/broadcasts/step2-select-audien
 import { Step3Personalize } from '@/components/broadcasts/step3-personalize';
 import { Step4ScheduleSend } from '@/components/broadcasts/step4-schedule-send';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const steps = [
@@ -22,7 +22,19 @@ const steps = [
 ] as const;
 
 export default function NewBroadcastPage() {
+  // `useSearchParams` needs a Suspense boundary or the production build
+  // fails (same as automations/new).
+  return (
+    <Suspense fallback={null}>
+      <NewBroadcastWizard />
+    </Suspense>
+  );
+}
+
+function NewBroadcastWizard() {
   const router = useRouter();
+  // ?draft=<id> continues a saved draft (Continue on its detail page).
+  const draftId = useSearchParams().get('draft');
   const t = useTranslations('Broadcasts.new');
   const { accountId } = useAuth();
   const { createAndSendBroadcast, isProcessing, progress } = useBroadcastSending();
@@ -48,6 +60,58 @@ export default function NewBroadcastPage() {
   const [name, setName] = useState('');
   // Off = skip students who already received this template.
   const [resendAlreadySent, setResendAlreadySent] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(Boolean(draftId));
+
+  // Fill the wizard from the draft and open the Send step, so the
+  // college only reviews and sends. A CSV audience isn't saved with a
+  // draft, so that one opens on the Audience step to upload again.
+  useEffect(() => {
+    if (!draftId) return;
+    let cancelled = false;
+    void (async () => {
+      const supabase = createClient();
+      const { data: draft } = await supabase
+        .from('broadcasts')
+        .select('name, status, template_name, template_language, template_variables, audience_filter')
+        .eq('id', draftId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (!draft || draft.status !== 'draft') {
+        toast.error(t('draftNotFound'));
+        setDraftLoading(false);
+        return;
+      }
+      const { data: templates } = await supabase
+        .from('message_templates')
+        .select('*')
+        .eq('status', 'APPROVED')
+        .eq('name', draft.template_name);
+      if (cancelled) return;
+      const options = (templates ?? []) as MessageTemplate[];
+      const match = options.find((tp) => tp.language === draft.template_language) ?? options[0] ?? null;
+      const filter = (draft.audience_filter ?? {}) as typeof audience;
+      setName(draft.name ?? '');
+      setVariables((draft.template_variables ?? {}) as typeof variables);
+      setAudience({
+        type: filter.type ?? 'all',
+        tagIds: filter.tagIds,
+        listIds: filter.listIds,
+        customField: filter.customField,
+        excludeTagIds: filter.excludeTagIds,
+      });
+      if (!match) {
+        toast.error(t('draftTemplateMissing', { name: draft.template_name }));
+      } else {
+        setTemplate(match);
+        setCurrentStep(filter.type === 'csv' ? 1 : 3);
+      }
+      setDraftLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per draft
+  }, [draftId]);
 
   async function handleSend() {
     if (!template) return;
@@ -67,6 +131,7 @@ export default function NewBroadcastPage() {
         variables,
         headerMediaUrl,
         resendAlreadySent,
+        draftId: draftId ?? undefined,
       });
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
@@ -79,13 +144,9 @@ export default function NewBroadcastPage() {
   }
 
   /**
-   * Writes a draft broadcast row — no recipients, no sending. The user
-   * can revisit it via the list page to finish the flow later. We
-   * don't persist the in-progress audience/variable config here
-   * because the current schema doesn't carry it past `audience_filter`
-   * and `template_variables`; those are enough for the user to
-   * recognize the draft but not to exactly round-trip into the wizard.
-   * A full resume-draft UX is a future polish.
+   * Writes a draft broadcast row — no recipients, no sending. Continue
+   * on its detail page reopens it here (?draft=<id>); saving again
+   * updates that same row. A CSV audience isn't kept.
    */
   async function handleSaveDraft() {
     if (!template || !name.trim()) {
@@ -106,7 +167,7 @@ export default function NewBroadcastPage() {
       return;
     }
 
-    const { error } = await supabase.from('broadcasts').insert({
+    const draftRow = {
       user_id: user.id,
       account_id: accountId,
       name: name.trim(),
@@ -117,6 +178,8 @@ export default function NewBroadcastPage() {
         type: audience.type,
         tagIds: audience.tagIds,
         listIds: audience.listIds,
+        customField: audience.customField,
+        excludeTagIds: audience.excludeTagIds,
       },
       status: 'draft',
       total_recipients: 0,
@@ -125,7 +188,10 @@ export default function NewBroadcastPage() {
       read_count: 0,
       replied_count: 0,
       failed_count: 0,
-    });
+    };
+    const { error } = draftId
+      ? await supabase.from('broadcasts').update(draftRow).eq('id', draftId).eq('status', 'draft')
+      : await supabase.from('broadcasts').insert(draftRow);
 
     if (error) {
       toast.error(t('toastFailedDraft', { error: error.message }));
@@ -141,9 +207,16 @@ export default function NewBroadcastPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {t('subtitle')}
+          {draftId && !draftLoading && name ? t('continuingDraft', { name }) : t('subtitle')}
         </p>
       </div>
+
+      {draftLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t('draftLoading')}
+        </div>
+      )}
 
       {/* Step Indicator */}
       <div className="flex items-center justify-between">
@@ -186,7 +259,7 @@ export default function NewBroadcastPage() {
       </div>
 
       {/* Step Content */}
-      <div className="relative min-h-[400px]">
+      <div className={`relative min-h-[400px] ${draftLoading ? 'hidden' : ''}`}>
         <div
           className="transition-all duration-300 ease-in-out"
           style={{
