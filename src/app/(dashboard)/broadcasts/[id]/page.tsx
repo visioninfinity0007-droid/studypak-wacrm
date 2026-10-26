@@ -387,49 +387,67 @@ export default function BroadcastDetailPage() {
           </div>
         </div>
 
-        {/* Delete — inline-confirm pattern matches the pipeline-settings
-            "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
-            because orphaning in-flight Meta messages would leave the
-            funnel inconsistent. */}
-        {confirmDelete ? (
-          <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
-            <span className="text-red-300">{t('deletePrompt')}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {broadcast.status === 'draft' && (
+            <Button
+              size="sm"
+              onClick={() => router.push(`/broadcasts/new?draft=${broadcast.id}`)}
+              title={t('continueDraftHover')}
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+              {t('continueDraft')}
+            </Button>
+          )}
+          {/* Delete — inline-confirm pattern matches the pipeline-settings
+              "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
+              because orphaning in-flight Meta messages would leave the
+              funnel inconsistent. */}
+          {confirmDelete ? (
+            <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
+              <span className="text-red-300">{t('deletePrompt')}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? t('deleting') : t('confirm')}
+              </Button>
+            </div>
+          ) : (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setConfirmDelete(false)}
-              disabled={deleting}
-              className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+              disabled={broadcast.status === 'sending'}
+              onClick={() => setConfirmDelete(true)}
+              title={
+                broadcast.status === 'sending'
+                  ? t('cannotDeleteSending')
+                  : t('deleteHover')
+              }
+              className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10 disabled:opacity-40"
             >
-              {t('cancel')}
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('delete')}
             </Button>
-            <Button
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              {deleting ? t('deleting') : t('confirm')}
-            </Button>
-          </div>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={broadcast.status === 'sending'}
-            onClick={() => setConfirmDelete(true)}
-            title={
-              broadcast.status === 'sending'
-                ? t('cannotDeleteSending')
-                : t('deleteHover')
-            }
-            className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10 disabled:opacity-40"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('delete')}
-          </Button>
-        )}
+          )}
+        </div>
       </div>
+
+      {broadcast.status === 'draft' && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground">
+          {t('draftHint')}
+        </div>
+      )}
 
       {/* Resume / retry (issue #472). Only rendered when there is
           actually something outstanding. */}

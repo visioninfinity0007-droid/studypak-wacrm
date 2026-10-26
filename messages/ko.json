@@ -1065,7 +1065,10 @@
       "queueSendingTitle": "Sending in the background",
       "queueSendingHint": "{count} recipients are queued. Sending continues on the server — you can close this page. Temporary WhatsApp errors are retried automatically.",
       "queueSendNow": "Send now",
-      "toastQueueNudged": "Sending started on the server."
+      "toastQueueNudged": "Sending started on the server.",
+      "continueDraft": "Continue",
+      "continueDraftHover": "Open this draft to review and send it",
+      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send."
     },
     "new": {
       "title": "새 브로드캐스트",
@@ -1081,7 +1084,11 @@
       "toastNotLinked": "프로필이 계정에 연결되어 있지 않습니다.",
       "toastFailedDraft": "초안 저장 실패: {error}",
       "toastDraftSaved": "초안이 저장되었습니다",
-      "broadcastFailed": "브로드캐스트 실패"
+      "broadcastFailed": "브로드캐스트 실패",
+      "draftLoading": "Loading draft…",
+      "draftNotFound": "This draft no longer exists or has already been sent.",
+      "draftTemplateMissing": "Template “{name}” is no longer approved. Choose a template to continue.",
+      "continuingDraft": "Continuing draft “{name}”. Review and press Send now."
     },
     "wizard": {
       "next": "다음",

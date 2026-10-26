@@ -49,6 +49,11 @@ interface BroadcastPayload {
    * earlier campaign. Off by default: they are skipped.
    */
   resendAlreadySent?: boolean;
+  /**
+   * A saved draft being sent: its row becomes the campaign instead of
+   * a second row being created next to it.
+   */
+  draftId?: string;
 }
 
 interface UseBroadcastSendingReturn {
@@ -299,37 +304,42 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       // ── Step 2: Create broadcast row ──────────────────────────────
       setProgress(10);
-      const { data: broadcast, error: broadcastError } = await supabase
-        .from('broadcasts')
-        .insert({
-          user_id: user.id,
-          account_id: accountId,
-          name: payload.name,
-          template_name: payload.template.name,
-          template_language: payload.template.language ?? 'en_US',
-          template_variables: payload.variables,
-          audience_filter: {
-            type: payload.audience.type,
-            tagIds: payload.audience.tagIds,
-            listIds: payload.audience.listIds,
-            customField: payload.audience.customField,
-            excludeTagIds: payload.audience.excludeTagIds,
-            resendAlreadySent: Boolean(payload.resendAlreadySent),
-            skippedAlreadySent,
-          },
-          // 'draft' until every recipient row exists — the queue route
-          // flips it to 'sending', so the worker can't start (and finish)
-          // a half-inserted campaign.
-          status: 'draft',
-          total_recipients: contacts.length,
-          sent_count: 0,
-          delivered_count: 0,
-          read_count: 0,
-          replied_count: 0,
-          failed_count: 0,
-        })
-        .select()
-        .single();
+      const broadcastRow = {
+        user_id: user.id,
+        account_id: accountId,
+        name: payload.name,
+        template_name: payload.template.name,
+        template_language: payload.template.language ?? 'en_US',
+        template_variables: payload.variables,
+        audience_filter: {
+          type: payload.audience.type,
+          tagIds: payload.audience.tagIds,
+          listIds: payload.audience.listIds,
+          customField: payload.audience.customField,
+          excludeTagIds: payload.audience.excludeTagIds,
+          resendAlreadySent: Boolean(payload.resendAlreadySent),
+          skippedAlreadySent,
+        },
+        // 'draft' until every recipient row exists — the queue route
+        // flips it to 'sending', so the worker can't start (and finish)
+        // a half-inserted campaign.
+        status: 'draft',
+        total_recipients: contacts.length,
+        sent_count: 0,
+        delivered_count: 0,
+        read_count: 0,
+        replied_count: 0,
+        failed_count: 0,
+      };
+      const { data: broadcast, error: broadcastError } = payload.draftId
+        ? await supabase
+            .from('broadcasts')
+            .update(broadcastRow)
+            .eq('id', payload.draftId)
+            .eq('status', 'draft')
+            .select()
+            .single()
+        : await supabase.from('broadcasts').insert(broadcastRow).select().single();
 
       if (broadcastError || !broadcast) {
         throw new Error(
