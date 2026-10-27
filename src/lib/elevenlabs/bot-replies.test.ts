@@ -163,6 +163,16 @@ describe('syncElevenLabsBotReplies', () => {
     ]);
   });
 
+  it('lists from `sinceUnix` when given, otherwise a week back', async () => {
+    const fetchImpl = fetchFor([], conversation());
+    const nowMs = Date.UTC(2026, 9, 27);
+    await syncElevenLabsBotReplies(makeDb() as never, { apiKey: 'k', nowMs, fetchImpl: fetchImpl as never });
+    await syncElevenLabsBotReplies(makeDb() as never, { apiKey: 'k', sinceUnix: 1792627200, fetchImpl: fetchImpl as never });
+    const urls = fetchImpl.mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain(`call_start_after_unix=${nowMs / 1000 - 7 * 86400}`);
+    expect(urls[1]).toContain('call_start_after_unix=1792627200');
+  });
+
   it('throws on an ElevenLabs error so the route answers 500', async () => {
     const fetchImpl = vi.fn(async () => new Response('{}', { status: 401 }));
     await expect(
