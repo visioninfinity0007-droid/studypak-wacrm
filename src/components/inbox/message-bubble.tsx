@@ -8,6 +8,7 @@ import type {
   TemplateButton,
 } from "@/types";
 import {
+  Bot,
   Clock,
   Check,
   CheckCheck,
@@ -373,6 +374,11 @@ export function MessageBubble({
   const t = useTranslations("Inbox.bubble");
 
   const isAgent = message.sender_type === "agent" || message.sender_type === "bot";
+  // Automated replies (the ElevenLabs agent, automations, flows, the AI
+  // assistant) get their own colour so a person's reply from the portal
+  // stands out from the bot's.
+  const isBot = message.sender_type === "bot" || Boolean(message.ai_generated);
+  const isElevenLabs = message.message_id?.startsWith("elevenlabs:") ?? false;
   const time = format(new Date(message.created_at), "HH:mm");
   const failure = isAgent ? failureReason(message) : null;
 
@@ -389,7 +395,11 @@ export function MessageBubble({
         className={cn(
           "relative rounded-2xl px-3 py-2",
           isAgent
-            ? "rounded-br-md bg-primary text-primary-foreground"
+            ? isBot
+              ? // Inner text uses the primary-foreground token; pin it to
+                // white so it reads on the blue in every theme.
+                "rounded-br-md bg-blue-600 text-white [--primary-foreground:oklch(0.985_0_0)] dark:bg-blue-500"
+              : "rounded-br-md bg-primary text-primary-foreground"
             : "rounded-bl-md bg-muted text-foreground",
         )}
       >
@@ -417,7 +427,16 @@ export function MessageBubble({
               (always outbound, so it sits on the primary fill). Lets
               agents tell an AI reply from their own / a Flow's at a
               glance. */}
-          {message.ai_generated && (
+          {isBot && (isElevenLabs || !message.ai_generated) && (
+            <span
+              className="inline-flex items-center gap-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary-foreground"
+              title={t("botBadgeTitle")}
+            >
+              <Bot className="h-2.5 w-2.5" />
+              {isElevenLabs ? t("elevenLabsBadge") : t("botBadge")}
+            </span>
+          )}
+          {message.ai_generated && !isElevenLabs && (
             <span
               className="inline-flex items-center gap-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary-foreground"
               title={t("aiBadgeTitle")}

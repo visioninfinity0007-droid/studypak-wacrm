@@ -190,6 +190,9 @@ async function importConversation(
       replies.map((r) => ({
         conversation_id: chat.id,
         sender_type: 'bot',
+        // An AI reply: counts as answering the student on the dashboard
+        // (conversations.last_reply_at, migration 059's trigger).
+        ai_generated: true,
         content_type: 'text',
         content_text: r.text,
         message_id: r.messageId,
