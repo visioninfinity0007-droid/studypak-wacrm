@@ -457,7 +457,10 @@
       "downloadFailed": "Não foi possível baixar o anexo",
       "viewImage": "Ver imagem",
       "expandVideo": "Expandir vídeo",
-      "imageAlt": "Imagem compartilhada"
+      "imageAlt": "Imagem compartilhada",
+      "botBadge": "Bot",
+      "elevenLabsBadge": "ElevenLabs bot",
+      "botBadgeTitle": "Sent automatically by a bot, not by a person"
     },
     "mediaViewer": {
       "counter": "{index} de {total}",

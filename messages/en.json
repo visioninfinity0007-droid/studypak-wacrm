@@ -457,7 +457,10 @@
       "downloadFailed": "Couldn't download the attachment",
       "viewImage": "View image",
       "expandVideo": "Expand video",
-      "imageAlt": "Shared image"
+      "imageAlt": "Shared image",
+      "botBadge": "Bot",
+      "elevenLabsBadge": "ElevenLabs bot",
+      "botBadgeTitle": "Sent automatically by a bot, not by a person"
     },
     "mediaViewer": {
       "counter": "{index} of {total}",
