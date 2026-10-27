@@ -118,6 +118,7 @@ describe('syncElevenLabsBotReplies', () => {
     expect(upserts[0].rows[0]).toMatchObject({
       conversation_id: 'chat-1',
       sender_type: 'bot',
+      ai_generated: true,
       message_id: 'elevenlabs:a1',
     });
     expect(chatUpdates).toEqual([]); // the chat's last message is newer than the bot's

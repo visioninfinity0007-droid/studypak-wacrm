@@ -427,7 +427,7 @@ export function MessageBubble({
               (always outbound, so it sits on the primary fill). Lets
               agents tell an AI reply from their own / a Flow's at a
               glance. */}
-          {isBot && !message.ai_generated && (
+          {isBot && (isElevenLabs || !message.ai_generated) && (
             <span
               className="inline-flex items-center gap-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary-foreground"
               title={t("botBadgeTitle")}
@@ -436,7 +436,7 @@ export function MessageBubble({
               {isElevenLabs ? t("elevenLabsBadge") : t("botBadge")}
             </span>
           )}
-          {message.ai_generated && (
+          {message.ai_generated && !isElevenLabs && (
             <span
               className="inline-flex items-center gap-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary-foreground"
               title={t("aiBadgeTitle")}
