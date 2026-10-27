@@ -22,10 +22,14 @@ import { findExistingContact } from '@/lib/contacts/dedupe';
 import { resolveConfigForPhoneNumber } from '@/lib/whatsapp/number-routing';
 
 const API_BASE = 'https://api.elevenlabs.io/v1/convai';
-/** WhatsApp chats stay open for a day or more; look back two days. */
-const LOOKBACK_SECS = 2 * 24 * 60 * 60;
+/**
+ * A student can come back to a chat days later, so each tick re-lists a
+ * week (a few hundred conversations: a handful of list calls). Older
+ * history is imported once with `sinceUnix` (?since= on the route).
+ */
+const LOOKBACK_SECS = 7 * 24 * 60 * 60;
 const PAGE_SIZE = 100;
-const MAX_PAGES = 10;
+const MAX_PAGES = 50;
 
 export interface ElevenLabsTurn {
   id?: string | null;
@@ -102,10 +106,10 @@ async function getJson<T>(fetchImpl: Fetch, apiKey: string, url: string): Promis
 
 export async function syncElevenLabsBotReplies(
   db: SupabaseClient,
-  opts: { apiKey: string; nowMs?: number; fetchImpl?: Fetch },
+  opts: { apiKey: string; nowMs?: number; sinceUnix?: number; fetchImpl?: Fetch },
 ): Promise<SyncResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const since = Math.floor((opts.nowMs ?? Date.now()) / 1000) - LOOKBACK_SECS;
+  const since = opts.sinceUnix ?? Math.floor((opts.nowMs ?? Date.now()) / 1000) - LOOKBACK_SECS;
   const result: SyncResult = { conversations: 0, fetched: 0, inserted: 0, skipped: 0 };
 
   const summaries: ConversationSummary[] = [];
