@@ -501,6 +501,16 @@ function InboxPageInner() {
   }, [router]);
 
 
+  // Chats deleted from the list's bulk actions or the thread's menu.
+  const handleConversationsDeleted = useCallback(
+    (ids: string[]) => {
+      const gone = new Set(ids);
+      setConversations((prev) => prev.filter((c) => !gone.has(c.id)));
+      if (activeConversation && gone.has(activeConversation.id)) handleCloseConversation();
+    },
+    [activeConversation, handleCloseConversation]
+  );
+
   const handleMessagesLoaded = useCallback(
     (loaded: Message[], conversationId: string) => {
       setMessages((prev) => mergeFetchedPage(prev, loaded, conversationId));
@@ -595,6 +605,7 @@ function InboxPageInner() {
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
             initialFilter={parseInboxFilter(searchParams.get("filter"))}
+            onConversationsDeleted={handleConversationsDeleted}
           />
         </div>
 
@@ -625,6 +636,7 @@ function InboxPageInner() {
             onStatusChange={handleStatusChange}
             onAssignChange={handleAssignChange}
             onBack={handleCloseConversation}
+            onDeleted={handleConversationsDeleted}
             resyncToken={resyncToken}
             onRefresh={handleManualRefresh}
             contactPanelOpen={contactPanelOpen}

@@ -349,7 +349,16 @@
       "clearAll": "Clear all",
       "noConversations": "No conversations found",
       "noMessagesYet": "No messages yet",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "select": "Select",
+      "selectedCount": "{count, number} selected",
+      "selectAllShown": "Select all {count, number}",
+      "selectNone": "Select none",
+      "export": "Export",
+      "exportShown": "Export {count, number} {count, plural, =1 {chat} other {chats}}",
+      "exportShownHint": "Download every chat the filters show as a CSV (Excel)",
+      "delete": "Delete",
+      "cancelSelect": "Cancel"
     },
     "messageThread": {
       "backToConversations": "Back to conversations",
@@ -532,6 +541,32 @@
       "resumed": "AI resumed.",
       "updateError": "Couldn’t update the AI assistant.",
       "networkError": "Couldn’t reach the server."
+    },
+    "chatActions": {
+      "menu": "Chat actions",
+      "exportChat": "Export chat",
+      "deleteChat": "Delete chat",
+      "exported": "Exported {chats, number} {chats, plural, =1 {chat} other {chats}} ({messages, number} messages).",
+      "exportFailed": "Export failed: {error}",
+      "deleteTitle": "Delete {count, plural, =1 {this chat} other {# chats}}?",
+      "deleteDesc": "{count, plural, =1 {Its messages are} other {Their messages are}} deleted for good. The {count, plural, =1 {contact stays} other {contacts stay}} in Contacts, and a new chat starts if they message again. Export first if you need a copy.",
+      "deleteConfirm": "Delete {count, plural, =1 {chat} other {# chats}}",
+      "deleted": "Deleted {count, plural, =1 {1 chat} other {# chats}}.",
+      "deletePartial": "Deleted {deleted, number} of {count, number} chats. You may not have permission for the rest.",
+      "deleteFailed": "Delete failed: {error}",
+      "cancel": "Cancel",
+      "colContact": "Contact",
+      "colPhone": "Phone",
+      "colTime": "Date & time",
+      "colFrom": "From",
+      "colMessage": "Message",
+      "colDelivery": "Delivery",
+      "colChatStatus": "Chat status",
+      "fromContact": "Contact",
+      "fromTeam": "Team",
+      "fromBot": "Bot",
+      "fromElevenLabs": "ElevenLabs bot",
+      "fromAi": "AI assistant"
     }
   },
   "Contacts": {

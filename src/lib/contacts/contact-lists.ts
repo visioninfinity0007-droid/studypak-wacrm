@@ -69,7 +69,7 @@ export function buildDuplicateReport(
     );
 }
 
-function csvCell(value: string): string {
+export function csvCell(value: string): string {
   // Leading = + - @ would run as a formula in Excel.
   const safe = /^[=+\-@]/.test(value) && !/^\+\d/.test(value) ? `'${value}` : value;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
