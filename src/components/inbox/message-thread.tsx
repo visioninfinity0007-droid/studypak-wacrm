@@ -66,6 +66,7 @@ import {
   withBusinessReaction,
 } from "@/lib/inbox/business-reaction";
 import { toast } from "sonner";
+import { ChatActionsMenu } from "@/components/inbox/chat-actions";
 import { Button } from "@/components/ui/button";
 import {
   confirmedSendUpdate,
@@ -126,6 +127,8 @@ interface MessageThreadProps {
    */
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
+  /** This chat was deleted from the header menu. */
+  onDeleted?: (ids: string[]) => void;
 }
 
 function formatDateSeparator(dateStr: string, t: ReturnType<typeof useTranslations>): string {
@@ -183,6 +186,7 @@ export function MessageThread({
   onBack,
   resyncToken = 0,
   onRefresh,
+  onDeleted,
   contactPanelOpen,
   onToggleContactPanel,
 }: MessageThreadProps) {
@@ -1084,6 +1088,10 @@ export function MessageThread({
                 className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
               />
             </button>
+          )}
+
+          {onDeleted && (
+            <ChatActionsMenu conversation={conversation} contact={contact} onDeleted={onDeleted} />
           )}
 
           {/* Status dropdown */}

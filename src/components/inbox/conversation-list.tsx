@@ -10,7 +10,14 @@ import {
 import { applyInboxFilter, type InboxFilter } from "@/lib/inbox/inbox-filters";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
-import { Search, ChevronDown, X } from "lucide-react";
+import { Search, ChevronDown, X, CheckSquare, Download, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useCan } from "@/hooks/use-can";
+import {
+  DeleteChatsDialog,
+  toExportChat,
+  useExportChats,
+} from "@/components/inbox/chat-actions";
 import { formatDistanceToNow } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
@@ -36,6 +43,8 @@ interface ConversationListProps {
    */
   resyncToken?: number;
   initialFilter?: InboxFilter;
+  /** Chats deleted from the list's bulk actions. */
+  onConversationsDeleted?: (ids: string[]) => void;
 }
 
 const STATUS_COLORS: Record<ConversationStatus, string> = {
@@ -52,8 +61,18 @@ export function ConversationList({
   onConversationsLoaded,
   resyncToken = 0,
   initialFilter = "all",
+  onConversationsDeleted,
 }: ConversationListProps) {
   const t = useTranslations("Inbox.conversationList");
+  const tActions = useTranslations("Inbox.chatActions");
+  const canExport = useCan("send-messages");
+  const canDelete = useCan("edit-settings");
+  const exportChats = useExportChats();
+  // Bulk actions: "Select" turns the list into checkboxes.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [exporting, setExporting] = useState(false);
+  const [deleteIds, setDeleteIds] = useState<string[]>([]);
   
   const FILTER_OPTIONS: { label: string; value: InboxFilter }[] = useMemo(() => [
     { label: t("filterAll"), value: "all" },
@@ -215,10 +234,43 @@ export function ConversationList({
 
   const handleSelect = useCallback(
     (conv: Conversation) => {
+      if (selectMode) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(conv.id)) next.delete(conv.id);
+          else next.add(conv.id);
+          return next;
+        });
+        return;
+      }
       onSelect(conv);
     },
-    [onSelect]
+    [onSelect, selectMode]
   );
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  // Export the ticked chats, or every chat the filters currently show.
+  const handleExport = useCallback(async () => {
+    const chats = (selectMode ? filtered.filter((c) => selectedIds.has(c.id)) : filtered).map((c) =>
+      toExportChat(c)
+    );
+    if (chats.length === 0) return;
+    setExporting(true);
+    try {
+      const count = await exportChats(chats, "chats");
+      toast.success(tActions("exported", { chats: chats.length, messages: count }));
+    } catch (err) {
+      toast.error(tActions("exportFailed", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setExporting(false);
+    }
+  }, [exportChats, filtered, selectMode, selectedIds, tActions]);
+
+  const allShownSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
 
   const activeFilter = FILTER_OPTIONS.find((o) => o.value === filter);
 
@@ -355,6 +407,71 @@ export function ConversationList({
           )}
         </div>
 
+        {/* Export / bulk select. Export without a selection takes every
+            chat the filters show. */}
+        {canExport && (
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            {selectMode ? (
+              <>
+                <span className="px-1 font-medium text-foreground">
+                  {t("selectedCount", { count: selectedIds.size })}
+                </span>
+                <button
+                  onClick={() =>
+                    setSelectedIds(allShownSelected ? new Set() : new Set(filtered.map((c) => c.id)))
+                  }
+                  className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {allShownSelected ? t("selectNone") : t("selectAllShown", { count: filtered.length })}
+                </button>
+                <button
+                  onClick={() => void handleExport()}
+                  disabled={exporting || selectedIds.size === 0}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                >
+                  {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  {t("export")}
+                </button>
+                {canDelete && (
+                  <button
+                    onClick={() => setDeleteIds(Array.from(selectedIds))}
+                    disabled={selectedIds.size === 0}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    {t("delete")}
+                  </button>
+                )}
+                <button
+                  onClick={exitSelectMode}
+                  className="ml-auto rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {t("cancelSelect")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <CheckSquare className="h-3 w-3" />
+                  {t("select")}
+                </button>
+                <button
+                  onClick={() => void handleExport()}
+                  disabled={exporting || filtered.length === 0}
+                  title={t("exportShownHint")}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                >
+                  {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                  {t("exportShown", { count: filtered.length })}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {hasContactFilters && (
           <div className="flex flex-wrap items-center gap-1">
             {selectedTagIds.map((id) => {
@@ -414,7 +531,9 @@ export function ConversationList({
               <ConversationItem
                 key={conv.id}
                 conversation={conv}
-                isActive={conv.id === activeConversationId}
+                isActive={!selectMode && conv.id === activeConversationId}
+                selectable={selectMode}
+                selected={selectedIds.has(conv.id)}
                 onSelect={handleSelect}
                 t={t}
               />
@@ -422,6 +541,15 @@ export function ConversationList({
           </div>
         )}
       </ScrollArea>
+      <DeleteChatsDialog
+        conversationIds={deleteIds}
+        onClose={() => setDeleteIds([])}
+        onDeleted={(ids) => {
+          setDeleteIds([]);
+          exitSelectMode();
+          onConversationsDeleted?.(ids);
+        }}
+      />
     </div>
   );
 }
@@ -429,6 +557,9 @@ export function ConversationList({
 interface ConversationItemProps {
   conversation: Conversation;
   isActive: boolean;
+  /** Bulk-select mode: show a checkbox; clicking toggles it. */
+  selectable?: boolean;
+  selected?: boolean;
   onSelect: (conversation: Conversation) => void;
   t: ReturnType<typeof useTranslations>;
 }
@@ -436,6 +567,8 @@ interface ConversationItemProps {
 function ConversationItem({
   conversation,
   isActive,
+  selectable = false,
+  selected = false,
   onSelect,
   t,
 }: ConversationItemProps) {
@@ -458,9 +591,21 @@ function ConversationItem({
       onClick={handleClick}
       className={cn(
         "flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50",
-        isActive && "border-l-2 border-primary bg-muted/70"
+        isActive && "border-l-2 border-primary bg-muted/70",
+        selected && "bg-primary/10"
       )}
+      aria-pressed={selectable ? selected : undefined}
     >
+      {selectable && (
+        <input
+          type="checkbox"
+          checked={selected}
+          readOnly
+          tabIndex={-1}
+          aria-hidden
+          className="mt-3 h-4 w-4 shrink-0 accent-primary"
+        />
+      )}
       {/* Avatar */}
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
         {contact?.avatar_url ? (
