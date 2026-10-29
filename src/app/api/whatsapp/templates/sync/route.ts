@@ -7,7 +7,8 @@ import {
 } from '@/lib/auth/account'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
-import type { TemplateButton, TemplateSampleValues } from '@/types'
+import type { MessageTemplate, TemplateButton, TemplateSampleValues } from '@/types'
+import { ensureTemplateHeaderMedia, needsHeaderMediaCopy } from '@/lib/whatsapp/template-header-media'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { getT } from '@/lib/i18n/translate'
 
@@ -291,6 +292,19 @@ export async function POST() {
           inserted++
         }
       }
+    }
+
+    // Media-header templates have only Meta's approved sample (an
+    // expiring CDN link in header_handle). Copy it into storage now so
+    // the inbox and broadcast forms can prefill a permanent link. `row`
+    // above never carries header_media_url, so a stored link is kept.
+    const { data: mediaRows } = await supabase
+      .from('message_templates')
+      .select('*')
+      .eq('account_id', accountId)
+      .in('header_type', ['image', 'video', 'document'])
+    for (const mediaRow of (mediaRows ?? []) as MessageTemplate[]) {
+      if (needsHeaderMediaCopy(mediaRow)) await ensureTemplateHeaderMedia(mediaRow)
     }
 
     return NextResponse.json({

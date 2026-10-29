@@ -26,6 +26,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { uploadAccountMedia } from "@/lib/storage/upload-media";
 import { isMediaHeaderKind, MEDIA_HEADER_SPECS } from "@/lib/whatsapp/media-header-types";
+import { approvedHeaderMedia, headerMediaProblem } from "@/lib/whatsapp/template-media-source";
 
 export interface TemplateSendValues {
   body: string[];
@@ -167,10 +168,10 @@ export function TemplatePicker({
     setSelected(template);
     setParams(new Array(slots.bodyVars.length).fill(""));
     setHeaderText("");
-    // Synced Meta templates often have only example.header_handle (creation
-    // sample), not a reusable header_media_url. The agent supplies an actual
-    // image/link here before sending; never use the creation handle as an id.
-    setHeaderMediaUrl(template.header_media_url ?? "");
+    // The field is an override: left empty, the template's own image is
+    // sent (a synced template's approved sample is copied into storage by
+    // the server on first send). A template with neither needs media here.
+    setHeaderMediaUrl("");
     setButtonParams({});
   }
 
@@ -178,16 +179,16 @@ export function TemplatePicker({
     if (!selected || !isMediaHeaderKind(selected.header_type)) return;
     const spec = MEDIA_HEADER_SPECS[selected.header_type];
     if (!spec.mimeTypes.includes(file.type) || file.size > spec.maxBytes) {
-      toast.error(`Choose ${spec.formats} media under ${Math.ceil(spec.maxBytes / 1048576)} MB.`);
+      toast.error(t("headerMediaWrongFile", { formats: spec.formats, mb: Math.ceil(spec.maxBytes / 1048576) }));
       return;
     }
     setUploadingHeader(true);
     try {
       const { publicUrl } = await uploadAccountMedia("chat-media", file);
       setHeaderMediaUrl(publicUrl);
-      toast.success("Template header media attached.");
+      toast.success(t("headerMediaAttached"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not upload header media.");
+      toast.error(t("headerMediaUploadFailed", { error: error instanceof Error ? error.message : String(error) }));
     } finally {
       setUploadingHeader(false);
     }
@@ -213,7 +214,10 @@ export function TemplatePicker({
   );
   const mediaKind = selected && isMediaHeaderKind(selected.header_type)
     ? selected.header_type : null;
-  const mediaUrlValid = !mediaKind || /^https?:\/\/[^\s]+$/i.test(headerMediaUrl.trim());
+  const mediaProblem = selected ? headerMediaProblem(headerMediaUrl, selected) : null;
+  const approvedMedia = selected && mediaKind ? approvedHeaderMedia(selected) : null;
+  const previewMedia = headerMediaUrl.trim() || approvedMedia;
+  const mediaUrlValid = mediaProblem === null;
   const canConfirm =
     !!selected &&
     !uploadingHeader &&
@@ -315,20 +319,29 @@ export function TemplatePicker({
             {mediaKind && (
               <div className="space-y-2 rounded-md border border-border bg-background/50 p-3">
                 <Label className="text-xs text-popover-foreground">
-                  {mediaKind.toUpperCase()} header media (required to send)
+                  {t("headerMediaLabel", { kind: mediaKind })}
                 </Label>
+                {mediaKind === "image" && previewMedia && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewMedia}
+                    alt=""
+                    className="max-h-32 rounded border border-border object-contain"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {approvedMedia ? t("headerMediaApproved", { kind: mediaKind }) : t("headerMediaRequired", { kind: mediaKind })}
+                </p>
                 <Input
                   value={headerMediaUrl}
                   onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                  placeholder="https://example.com/image.jpg"
+                  placeholder={t("headerMediaUrlPlaceholder")}
+                  aria-label={t("headerMediaUrlLabel")}
                   className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Meta needs a direct media URL for every template send. The image in the template preview is only a creation sample.
-                </p>
                 <Input
                   type="file"
-                  aria-label={`Upload ${mediaKind} header`}
+                  aria-label={t("headerMediaUpload", { kind: mediaKind })}
                   accept={MEDIA_HEADER_SPECS[mediaKind].mimeTypes.join(",")}
                   disabled={uploadingHeader}
                   onChange={(e) => {
@@ -338,7 +351,10 @@ export function TemplatePicker({
                   }}
                   className="border-border bg-muted text-foreground"
                 />
-                {uploadingHeader && <p className="text-xs text-muted-foreground">Uploading header media…</p>}
+                {uploadingHeader && <p className="text-xs text-muted-foreground">{t("headerMediaUploading")}</p>}
+                {mediaProblem === "invalid" && (
+                  <p className="text-xs text-destructive">{t("headerMediaInvalid")}</p>
+                )}
               </div>
             )}
             {slots?.bodyVars.map((v, i) => (

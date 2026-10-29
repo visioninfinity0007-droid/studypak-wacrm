@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 vi.mock('@/lib/whatsapp/encryption', () => ({ decrypt: (v: string) => `dec:${v}` }));
-vi.mock('@/lib/whatsapp/template-body', () => ({
-  resolveTemplateRow: async () => ({ row: null, language: 'en', malformed: false }),
+const templateBody = vi.hoisted(() => ({
+  resolveTemplateRow: vi.fn(async (): Promise<{ row: unknown; language: string; malformed: boolean }> => ({
+    row: null, language: 'en', malformed: false,
+  })),
 }));
+vi.mock('@/lib/whatsapp/template-body', () => templateBody);
 
 const { MetaApiError } = await import('@/lib/whatsapp/meta-api');
 const {
@@ -121,6 +124,23 @@ beforeEach(() => { clock = T0; sleep.mockClear(); delete process.env.BROADCAST_S
 afterEach(() => { delete process.env.BROADCAST_MESSAGES_PER_SECOND; });
 
 describe('drainBroadcast', () => {
+  it('sends an image-header template to every recipient with the one stored image', async () => {
+    const image = 'https://store.example/chat-media/acc/template-headers/mbbs.png';
+    templateBody.resolveTemplateRow.mockResolvedValueOnce({
+      row: { id: 't1', name: 'tpl', body_text: 'Dear {{1}}', header_type: 'image', header_media_url: image },
+      language: 'en',
+      malformed: false,
+    });
+    const { db } = world();
+    const send = vi.fn(async () => ({ messageId: `wamid.${send.mock.calls.length}` }));
+    await drainBroadcast(db, 'b1', T0 + 60_000, { send, sleep, now });
+
+    expect(send).toHaveBeenCalledTimes(2);
+    for (const call of send.mock.calls as unknown as [{ template?: { header_media_url?: string } }][]) {
+      expect(call[0].template?.header_media_url).toBe(image);
+    }
+  });
+
   it('sends every pending recipient from the server, paced, then finalizes and releases the lease', async () => {
     const { db, tables } = world();
     const send = vi.fn(async () => ({ messageId: `wamid.${send.mock.calls.length}` }));

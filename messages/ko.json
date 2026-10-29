@@ -521,7 +521,18 @@
       "send": "템플릿 보내기",
       "headerVarLabel": "헤더 {var}",
       "bodyVarLabel": "본문 {var}",
-      "urlButtonVarLabel": "URL 버튼 \"{text}\" — {var} 값"
+      "urlButtonVarLabel": "URL 버튼 \"{text}\" — {var} 값",
+      "headerMediaLabel": "{kind, select, image {Header image} video {Header video} other {Header document}}",
+      "headerMediaApproved": "Sends the {kind, select, image {image} video {video} other {document}} this template was approved with. To send a different one, upload it or paste a direct link.",
+      "headerMediaRequired": "This template needs {kind, select, image {an image} video {a video} other {a document}} to send. Upload one or paste a direct link.",
+      "headerMediaUrlLabel": "Direct link to the media",
+      "headerMediaUrlPlaceholder": "https://example.com/image.jpg",
+      "headerMediaUpload": "Upload {kind, select, image {an image} video {a video} other {a document}}",
+      "headerMediaUploading": "Uploading…",
+      "headerMediaInvalid": "Enter a link that starts with https://",
+      "headerMediaWrongFile": "Choose a {formats} file under {mb, number} MB.",
+      "headerMediaAttached": "Media attached.",
+      "headerMediaUploadFailed": "Upload failed: {error}"
     },
     "sidebar": {
       "contactInfo": "연락처 정보",
@@ -1217,7 +1228,8 @@
           "email": "이메일"
         },
         "sampleName": "홍길동",
-        "sampleCompany": "예시 주식회사"
+        "sampleCompany": "예시 주식회사",
+        "usesApprovedMedia": "Leave empty to send the {kind, select, image {image} video {video} other {document}} this template was approved with."
       },
       "scheduleSend": {
         "title": "검토 및 전송",

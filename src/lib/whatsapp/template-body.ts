@@ -17,6 +17,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
+import { ensureTemplateHeaderMedia } from '@/lib/whatsapp/template-header-media';
 import type { MessageTemplate } from '@/types';
 
 /**
@@ -144,7 +145,9 @@ export async function resolveTemplateRow(
   }
 
   return {
-    row: chosen,
+    // A synced media-header template gets its approved sample copied
+    // into storage here, so every send path has a link to send.
+    row: await ensureTemplateHeaderMedia(chosen),
     malformed: false,
     language: requestedLanguage || chosen.language || 'en_US',
   };

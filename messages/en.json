@@ -521,7 +521,18 @@
       "send": "Send template",
       "headerVarLabel": "Header {var}",
       "bodyVarLabel": "Body {var}",
-      "urlButtonVarLabel": "URL button \"{text}\" — value for {var}"
+      "urlButtonVarLabel": "URL button \"{text}\" — value for {var}",
+      "headerMediaLabel": "{kind, select, image {Header image} video {Header video} other {Header document}}",
+      "headerMediaApproved": "Sends the {kind, select, image {image} video {video} other {document}} this template was approved with. To send a different one, upload it or paste a direct link.",
+      "headerMediaRequired": "This template needs {kind, select, image {an image} video {a video} other {a document}} to send. Upload one or paste a direct link.",
+      "headerMediaUrlLabel": "Direct link to the media",
+      "headerMediaUrlPlaceholder": "https://example.com/image.jpg",
+      "headerMediaUpload": "Upload {kind, select, image {an image} video {a video} other {a document}}",
+      "headerMediaUploading": "Uploading…",
+      "headerMediaInvalid": "Enter a link that starts with https://",
+      "headerMediaWrongFile": "Choose a {formats} file under {mb, number} MB.",
+      "headerMediaAttached": "Media attached.",
+      "headerMediaUploadFailed": "Upload failed: {error}"
     },
     "sidebar": {
       "contactInfo": "Contact info",
@@ -1217,7 +1228,8 @@
           "email": "Email"
         },
         "sampleName": "John Doe",
-        "sampleCompany": "Acme Corp"
+        "sampleCompany": "Acme Corp",
+        "usesApprovedMedia": "Leave empty to send the {kind, select, image {image} video {video} other {document}} this template was approved with."
       },
       "scheduleSend": {
         "title": "Review & Send",
@@ -2879,7 +2891,7 @@
       "headerEmpty": "Header {kind} is empty.",
       "headerTooLarge": "Header {kind} is {size} MB — Meta's limit is {max} MB.",
       "headerTextValueRequired": "Header text variable {var} requires a value — pass headerText.",
-      "mediaHeaderSendSource": "{type} header requires a media link or id at send time — set header_media_url on the template or pass headerMediaUrl/headerMediaId.",
+      "mediaHeaderSendSource": "This template's {type} header has no media to send. Attach the {type} (upload it or paste a direct link) and send again.",
       "bodyValuesMissing": "Body has {count} variable(s) but only {got} value(s) were supplied.",
       "urlButtonParamRequired": "URL button #{n} uses {var} — requires a buttonParams[{index}] value."
     },
