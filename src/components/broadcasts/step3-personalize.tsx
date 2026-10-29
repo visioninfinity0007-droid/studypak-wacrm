@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft, ArrowRight, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { approvedHeaderMedia, headerMediaProblem } from '@/lib/whatsapp/template-media-source';
 
 type VariableType = 'static' | 'field' | 'custom_field';
 
@@ -153,13 +154,16 @@ export function Step3Personalize({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaHeaderType, template.header_media_url]);
 
+  // Empty is fine when the template has its own approved media (a
+  // synced template's sample is copied into storage by the server).
   const headerMediaError = useMemo<'missing' | 'invalid' | null>(() => {
     if (!mediaHeaderType) return null;
-    const value = headerMediaUrl.trim();
-    if (!value) return 'missing';
-    if (!isValidHttpUrl(value)) return 'invalid';
-    return null;
-  }, [mediaHeaderType, headerMediaUrl]);
+    const problem = headerMediaProblem(headerMediaUrl, template);
+    if (problem) return problem;
+    return headerMediaUrl.trim() && !isValidHttpUrl(headerMediaUrl.trim()) ? 'invalid' : null;
+  }, [mediaHeaderType, headerMediaUrl, template]);
+  const approvedMedia = mediaHeaderType ? approvedHeaderMedia(template) : null;
+  const previewMedia = headerMediaUrl.trim() || approvedMedia;
 
   /**
    * A placeholder is "unmapped" if the user hasn't picked either a
@@ -269,12 +273,17 @@ export function Step3Personalize({
           <p className="mt-1.5 text-xs text-muted-foreground">
             {t('personalize.headerImageDesc')}
           </p>
+          {!headerMediaUrl.trim() && approvedMedia && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {t('personalize.usesApprovedMedia', { kind: mediaHeaderType })}
+            </p>
+          )}
           {mediaHeaderType === 'image' &&
             headerMediaError === null &&
-            headerMediaUrl.trim() && (
+            previewMedia && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={headerMediaUrl.trim()}
+                src={previewMedia}
                 alt={t('personalize.headerPreviewAlt')}
                 className="mt-3 max-h-40 rounded-lg border border-border object-contain"
               />

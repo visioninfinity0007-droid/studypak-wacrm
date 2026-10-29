@@ -521,7 +521,18 @@
       "send": "Enviar plantilla",
       "headerVarLabel": "Encabezado {var}",
       "bodyVarLabel": "Cuerpo {var}",
-      "urlButtonVarLabel": "Botón de URL \"{text}\": valor para {var}"
+      "urlButtonVarLabel": "Botón de URL \"{text}\": valor para {var}",
+      "headerMediaLabel": "{kind, select, image {Header image} video {Header video} other {Header document}}",
+      "headerMediaApproved": "Sends the {kind, select, image {image} video {video} other {document}} this template was approved with. To send a different one, upload it or paste a direct link.",
+      "headerMediaRequired": "This template needs {kind, select, image {an image} video {a video} other {a document}} to send. Upload one or paste a direct link.",
+      "headerMediaUrlLabel": "Direct link to the media",
+      "headerMediaUrlPlaceholder": "https://example.com/image.jpg",
+      "headerMediaUpload": "Upload {kind, select, image {an image} video {a video} other {a document}}",
+      "headerMediaUploading": "Uploading…",
+      "headerMediaInvalid": "Enter a link that starts with https://",
+      "headerMediaWrongFile": "Choose a {formats} file under {mb, number} MB.",
+      "headerMediaAttached": "Media attached.",
+      "headerMediaUploadFailed": "Upload failed: {error}"
     },
     "sidebar": {
       "contactInfo": "Información del contacto",
@@ -1217,7 +1228,8 @@
           "email": "Correo"
         },
         "sampleName": "Juan Pérez",
-        "sampleCompany": "Empresa Ejemplo S.A."
+        "sampleCompany": "Empresa Ejemplo S.A.",
+        "usesApprovedMedia": "Leave empty to send the {kind, select, image {image} video {video} other {document}} this template was approved with."
       },
       "scheduleSend": {
         "title": "Revisar y enviar",

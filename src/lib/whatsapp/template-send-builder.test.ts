@@ -146,7 +146,7 @@ describe('buildSendComponents — header', () => {
   it('throws on media header with no link OR id available', () => {
     expect(() =>
       buildSendComponents(row({ header_type: 'image' })),
-    ).toThrow(/requires a media link or id/);
+    ).toThrow(/has no media to send/);
   });
 });
 
