@@ -22,6 +22,7 @@ import { readCappedBody } from '@/lib/whatsapp/webhook-body'
 import { resumeAwaitingReply, runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
+import { dispatchToElevenLabsAgent } from '@/lib/elevenlabs/agent-bridge'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
 import {
   applyBroadcastRecipientStatus,
@@ -890,7 +891,23 @@ async function processMessage(
   // the account has enabled it. Awaited inside `after()` (same reason as
   // the webhook dispatch below); `dispatchInboundToAiReply` owns its
   // eligibility gates + try/catch and never throws.
-  if (!contentConsumed && !interactiveReplyId && inboundText.trim()) {
+  // A college whose ElevenLabs agent can't hear its number directly is
+  // answered by that agent through the portal (agent-bridge.ts) — typed
+  // messages and button taps alike — and the portal's own AI stays out.
+  const bridged =
+    !contentConsumed && inboundText.trim()
+      ? await dispatchToElevenLabsAgent({
+          db: supabaseAdmin(),
+          accountId,
+          conversationId: conversation.id,
+          contactId: contactRecord.id,
+          configOwnerUserId,
+          text: inboundText,
+          inboundMessageId: message.id,
+        })
+      : false
+
+  if (!bridged && !contentConsumed && !interactiveReplyId && inboundText.trim()) {
     await dispatchInboundToAiReply({
       accountId,
       conversationId: conversation.id,
