@@ -26,7 +26,12 @@ const t = getT('Api')
  *                    GET /{waba_id}/subscribed_apps
  *   3. registered_at — local timestamp set by POST /config when
  *                    /register last succeeded; NULL means the
- *                    number was saved but never actually subscribed
+ *                    number was saved but never actually subscribed.
+ *                    When Meta itself reports the number on the
+ *                    Cloud API and the WABA is subscribed, the number
+ *                    is live whatever the timestamp says (it was
+ *                    registered outside the portal, or before the
+ *                    timestamp existed), so it is stamped here.
  *
  * Returns 200 in every case so the UI can render diagnostic detail
  * rather than a generic error toast. The combined `live` flag is
@@ -107,12 +112,14 @@ export async function GET() {
   const errors: string[] = []
 
   // 1. Phone metadata
+  let onCloudApi = false
   try {
-    await verifyPhoneNumber({
+    const phone = await verifyPhoneNumber({
       phoneNumberId: config.phone_number_id,
       accessToken,
     })
     checks.phone_metadata_ok = true
+    onCloudApi = phone.platform_type === 'CLOUD_API'
   } catch (err) {
     errors.push(
       t('whatsappConfig.phoneCheckFailed', { message: err instanceof Error ? err.message : String(err) }),
@@ -147,6 +154,23 @@ export async function GET() {
     )
   }
 
+  // 3. Registered on Meta's side but never stamped locally: stamp it, so
+  // the "Not registered" warning stops showing for a number that works.
+  let registeredAt: string | null = config.registered_at ?? null
+  if (!checks.locally_marked_registered && onCloudApi && checks.waba_subscribed_to_app) {
+    registeredAt = new Date().toISOString()
+    const { error: stampError } = await supabase
+      .from('whatsapp_config')
+      .update({ registered_at: registeredAt, last_registration_error: null })
+      .eq('account_id', accountId)
+    if (stampError) {
+      console.error('verify-registration: could not stamp registered_at:', stampError)
+      registeredAt = null
+    } else {
+      checks.locally_marked_registered = true
+    }
+  }
+
   const live =
     checks.phone_metadata_ok &&
     (checks.waba_subscribed_to_app ?? false) &&
@@ -156,8 +180,10 @@ export async function GET() {
     live,
     checks,
     errors,
-    last_registration_error: config.last_registration_error ?? null,
-    registered_at: config.registered_at ?? null,
+    last_registration_error: checks.locally_marked_registered
+      ? null
+      : (config.last_registration_error ?? null),
+    registered_at: registeredAt,
     subscribed_apps_at: config.subscribed_apps_at ?? null,
   })
 }
