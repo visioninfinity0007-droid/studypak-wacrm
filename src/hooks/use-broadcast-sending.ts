@@ -9,6 +9,7 @@ import {
   splitAlreadySent,
   type AudienceConfig,
 } from '@/lib/broadcast-audience';
+import { SCHEDULE_ERROR_MESSAGES, checkScheduledAt } from '@/lib/broadcast-schedule';
 import { normalizeKey } from '@/lib/contacts/dedupe';
 import { fetchAllInChunks } from '@/lib/supabase/paged-query';
 import { Contact, MessageTemplate } from '@/types';
@@ -54,6 +55,11 @@ interface BroadcastPayload {
    * a second row being created next to it.
    */
   draftId?: string;
+  /**
+   * Send later instead of now (ISO time). The campaign and its
+   * recipients are stored now; the server queue starts it at this time.
+   */
+  scheduledAt?: string;
 }
 
 interface UseBroadcastSendingReturn {
@@ -279,6 +285,12 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       if (!accountId) {
         throw new Error(t('notLinkedToAccount'));
       }
+      // Check the send time before anything is written, so a bad time
+      // can't leave a half-made campaign behind.
+      if (payload.scheduledAt) {
+        const check = checkScheduledAt(payload.scheduledAt, Date.now());
+        if (!check.ok) throw new Error(SCHEDULE_ERROR_MESSAGES[check.reason]);
+      }
 
       // ── Step 1: Resolve audience contacts ─────────────────────────
       setProgress(5);
@@ -430,6 +442,12 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       setProgress(80);
       const res = await fetch(`/api/whatsapp/broadcast/${broadcast.id}/queue`, {
         method: 'POST',
+        ...(payload.scheduledAt
+          ? {
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scheduledAt: payload.scheduledAt }),
+            }
+          : {}),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

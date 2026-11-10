@@ -34,7 +34,18 @@ import {
   Trash2,
   PlayCircle,
   RotateCcw,
+  Clock,
+  XCircle,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { SCHEDULE_MIN_LEAD_MS, checkScheduledAt } from '@/lib/broadcast-schedule';
+
+/** Local "YYYY-MM-DDTHH:mm" for a datetime-local input. */
+function toLocalInputValue(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 import { toast } from 'sonner';
 import {
   getBroadcastStatus,
@@ -164,6 +175,10 @@ export default function BroadcastDetailPage() {
   const [resumingScope, setResumingScope] = useState<
     'pending' | 'failed' | null
   >(null);
+  // Scheduled campaign: which action is running, and the "change time"
+  // editor (null when closed).
+  const [scheduleBusy, setScheduleBusy] = useState<'reschedule' | 'send_now' | 'cancel' | null>(null);
+  const [rescheduleValue, setRescheduleValue] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -297,6 +312,44 @@ export default function BroadcastDetailPage() {
       );
     } finally {
       setResumingScope(null);
+    }
+  }
+
+  /** Send now, change the time, or cancel a scheduled campaign. */
+  async function handleScheduleAction(
+    action: 'reschedule' | 'send_now' | 'cancel',
+    scheduledAt?: string,
+  ) {
+    setScheduleBusy(action);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, scheduledAt }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string; scheduledAt?: string };
+      if (!res.ok) {
+        toast.error(t('toastScheduleFailed', { error: payload.error || `HTTP ${res.status}` }));
+        await fetchData();
+        return;
+      }
+      if (action === 'reschedule') {
+        setRescheduleValue(null);
+        toast.success(t('toastRescheduled', {
+          time: new Date(payload.scheduledAt ?? scheduledAt ?? Date.now()).toLocaleString(),
+        }));
+      } else if (action === 'send_now') {
+        toast.success(t('toastScheduleSendNow'));
+      } else {
+        toast.success(t('toastScheduleCancelled'));
+      }
+      await fetchData();
+    } catch (err) {
+      toast.error(t('toastScheduleFailed', {
+        error: err instanceof Error ? err.message : t('unknownError'),
+      }));
+    } finally {
+      setScheduleBusy(null);
     }
   }
 
@@ -449,9 +502,110 @@ export default function BroadcastDetailPage() {
         </div>
       )}
 
+      {broadcast.status === 'scheduled' && (
+        <div className="space-y-3 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="text-sm">
+              <p className="flex items-center gap-1.5 font-medium text-foreground">
+                <Clock className="h-4 w-4 text-blue-400" />
+                {broadcast.scheduled_at
+                  ? t('scheduledTitle', { time: new Date(broadcast.scheduled_at).toLocaleString() })
+                  : t('scheduledTitleNoTime')}
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                {t('scheduledHint', { count: broadcast.total_recipients })}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => handleScheduleAction('send_now')}
+                disabled={scheduleBusy !== null}
+              >
+                {scheduleBusy === 'send_now' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PlayCircle className="h-3.5 w-3.5" />
+                )}
+                {t('scheduleSendNow')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setRescheduleValue(
+                    toLocalInputValue(
+                      broadcast.scheduled_at ? Date.parse(broadcast.scheduled_at) : Date.now() + 60 * 60_000,
+                    ),
+                  )
+                }
+                disabled={scheduleBusy !== null}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                <Clock className="h-3.5 w-3.5" />
+                {t('scheduleChange')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleScheduleAction('cancel')}
+                disabled={scheduleBusy !== null}
+                title={t('scheduleCancelHover')}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                {scheduleBusy === 'cancel' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5" />
+                )}
+                {t('scheduleCancel')}
+              </Button>
+            </div>
+          </div>
+          {rescheduleValue !== null && (() => {
+            const check = checkScheduledAt(new Date(Date.parse(rescheduleValue) || NaN), Date.now());
+            return (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-sm">
+                <Input
+                  type="datetime-local"
+                  value={rescheduleValue}
+                  min={toLocalInputValue(Date.now() + SCHEDULE_MIN_LEAD_MS)}
+                  onChange={(e) => setRescheduleValue(e.target.value)}
+                  aria-label={t('scheduleChange')}
+                  className="w-fit border-border bg-muted text-foreground"
+                />
+                <Button
+                  size="sm"
+                  disabled={!check.ok || scheduleBusy !== null}
+                  onClick={() => check.ok && handleScheduleAction('reschedule', check.iso)}
+                >
+                  {scheduleBusy === 'reschedule' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {t('scheduleSave')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRescheduleValue(null)}
+                  disabled={scheduleBusy !== null}
+                  className="border-border text-muted-foreground hover:bg-muted"
+                >
+                  {t('cancel')}
+                </Button>
+                {!check.ok && (
+                  <p role="alert" className="w-full text-xs text-destructive">
+                    {check.reason === 'too_far' ? t('scheduleErrTooFar') : t('scheduleErrTooSoon')}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Resume / retry (issue #472). Only rendered when there is
-          actually something outstanding. */}
-      {(pendingCount > 0 || retryableCount > 0) && (
+          actually something outstanding — not for a scheduled campaign,
+          whose recipients are pending until its time comes. */}
+      {broadcast.status !== 'scheduled' && (pendingCount > 0 || retryableCount > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">

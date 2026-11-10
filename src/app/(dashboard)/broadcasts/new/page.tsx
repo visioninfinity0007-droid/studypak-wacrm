@@ -113,7 +113,8 @@ function NewBroadcastWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per draft
   }, [draftId]);
 
-  async function handleSend() {
+  /** `scheduledAt` set: store the campaign now, send it at that time. */
+  async function handleSend(scheduledAt?: string) {
     if (!template) return;
 
     try {
@@ -132,7 +133,11 @@ function NewBroadcastWizard() {
         headerMediaUrl,
         resendAlreadySent,
         draftId: draftId ?? undefined,
+        scheduledAt,
       });
+      if (scheduledAt) {
+        toast.success(t('toastScheduled', { time: new Date(scheduledAt).toLocaleString() }));
+      }
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
       // Previously swallowed with console.error — the wizard would

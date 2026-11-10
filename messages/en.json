@@ -1048,7 +1048,8 @@
       },
       "errorLoad": "Failed to load broadcasts",
       "broadcastInProgress": "Broadcast in progress",
-      "retry": "Retry"
+      "retry": "Retry",
+      "scheduledFor": "Sends {time}"
     },
     "status": {
       "draft": "Draft",
@@ -1117,7 +1118,21 @@
       "toastQueueNudged": "Sending started on the server.",
       "continueDraft": "Continue",
       "continueDraftHover": "Open this draft to review and send it",
-      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send."
+      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send.",
+      "scheduledTitle": "Scheduled for {time}",
+      "scheduledTitleNoTime": "Scheduled",
+      "scheduledHint": "Nothing has been sent yet. {count, number} {count, plural, =1 {recipient is} other {recipients are}} saved and will receive it at that time.",
+      "scheduleSendNow": "Send now",
+      "scheduleChange": "Change time",
+      "scheduleSave": "Save time",
+      "scheduleCancel": "Cancel schedule",
+      "scheduleCancelHover": "Stop this campaign from sending. It becomes a draft you can edit and send later.",
+      "scheduleErrTooSoon": "Pick a time at least 5 minutes from now.",
+      "scheduleErrTooFar": "Pick a time within the next 90 days.",
+      "toastRescheduled": "Send time changed to {time}",
+      "toastScheduleSendNow": "Sending started",
+      "toastScheduleCancelled": "Schedule cancelled. The campaign is a draft again.",
+      "toastScheduleFailed": "Could not update the schedule: {error}"
     },
     "new": {
       "title": "New Broadcast",
@@ -1137,7 +1152,8 @@
       "draftLoading": "Loading draft…",
       "draftNotFound": "This draft no longer exists or has already been sent.",
       "draftTemplateMissing": "Template “{name}” is no longer approved. Choose a template to continue.",
-      "continuingDraft": "Continuing draft “{name}”. Review and press Send now."
+      "continuingDraft": "Continuing draft “{name}”. Review and press Send now.",
+      "toastScheduled": "Broadcast scheduled for {time}"
     },
     "wizard": {
       "next": "Next",
@@ -1259,7 +1275,27 @@
         "alreadySent": "{count, number} {count, plural, =1 {student} other {students}} in this audience already received the \"{template}\" template in an earlier campaign.",
         "resendAlreadySent": "Send to {count, plural, =1 {this student} other {these {count, number} students}} again",
         "resendOff": "Not ticked: they will be skipped, and only the others receive this message.",
-        "resendOn": "Ticked: they will receive this message again."
+        "resendOn": "Ticked: they will receive this message again.",
+        "whenTitle": "When to send",
+        "optionNow": "Send now",
+        "optionLater": "Schedule for later",
+        "afterDelay": "After a delay",
+        "atTime": "At a date and time",
+        "delayPrefix": "Send after",
+        "delayAmount": "How long to wait",
+        "delayUnit": "Unit",
+        "unitMinutes": "minutes",
+        "unitHours": "hours",
+        "unitDays": "days",
+        "willSendAt": "Will send on {time}",
+        "scheduleHint": "The recipient list is fixed now. Contacts added to the audience later will not be included.",
+        "scheduleButton": "Schedule Broadcast",
+        "scheduling": "Scheduling...",
+        "confirmScheduleTitle": "Confirm schedule",
+        "confirmScheduleDesc": "This broadcast will go to <b>{count, number}</b> {count, plural, =1 {contact} other {contacts}} using the <b>{template}</b> template on <b>{time}</b>. You can change the time or cancel it until then.",
+        "errInvalid": "Enter a valid send time.",
+        "errTooSoon": "Pick a time at least 5 minutes from now.",
+        "errTooFar": "Pick a time within the next 90 days."
       }
     },
     "sending": {

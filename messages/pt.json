@@ -1048,7 +1048,8 @@
       },
       "errorLoad": "Falha ao carregar os disparos",
       "broadcastInProgress": "Disparo em andamento",
-      "retry": "Tentar novamente"
+      "retry": "Tentar novamente",
+      "scheduledFor": "Envia {time}"
     },
     "status": {
       "draft": "Rascunho",
@@ -1117,7 +1118,21 @@
       "toastQueueNudged": "Sending started on the server.",
       "continueDraft": "Continue",
       "continueDraftHover": "Open this draft to review and send it",
-      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send."
+      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send.",
+      "scheduledTitle": "Agendada para {time}",
+      "scheduledTitleNoTime": "Agendada",
+      "scheduledHint": "Nada foi enviado ainda. {count, number} {count, plural, =1 {destinatário está salvo} other {destinatários estão salvos}} e receberão nesse horário.",
+      "scheduleSendNow": "Enviar agora",
+      "scheduleChange": "Alterar horário",
+      "scheduleSave": "Salvar horário",
+      "scheduleCancel": "Cancelar agendamento",
+      "scheduleCancelHover": "Impede o envio desta campanha. Ela volta a ser um rascunho que você pode editar e enviar depois.",
+      "scheduleErrTooSoon": "Escolha um horário com pelo menos 5 minutos a partir de agora.",
+      "scheduleErrTooFar": "Escolha um horário nos próximos 90 dias.",
+      "toastRescheduled": "Horário de envio alterado para {time}",
+      "toastScheduleSendNow": "Envio iniciado",
+      "toastScheduleCancelled": "Agendamento cancelado. A campanha voltou a ser um rascunho.",
+      "toastScheduleFailed": "Não foi possível atualizar o agendamento: {error}"
     },
     "new": {
       "title": "Novo disparo",
@@ -1137,7 +1152,8 @@
       "draftLoading": "Loading draft…",
       "draftNotFound": "This draft no longer exists or has already been sent.",
       "draftTemplateMissing": "Template “{name}” is no longer approved. Choose a template to continue.",
-      "continuingDraft": "Continuing draft “{name}”. Review and press Send now."
+      "continuingDraft": "Continuing draft “{name}”. Review and press Send now.",
+      "toastScheduled": "Transmissão agendada para {time}"
     },
     "wizard": {
       "next": "Avançar",
@@ -1259,7 +1275,27 @@
         "alreadySent": "{count, number} {count, plural, =1 {student} other {students}} in this audience already received the \"{template}\" template in an earlier campaign.",
         "resendAlreadySent": "Send to {count, plural, =1 {this student} other {these {count, number} students}} again",
         "resendOff": "Not ticked: they will be skipped, and only the others receive this message.",
-        "resendOn": "Ticked: they will receive this message again."
+        "resendOn": "Ticked: they will receive this message again.",
+        "whenTitle": "Quando enviar",
+        "optionNow": "Enviar agora",
+        "optionLater": "Agendar para depois",
+        "afterDelay": "Depois de um tempo",
+        "atTime": "Em uma data e hora",
+        "delayPrefix": "Enviar depois de",
+        "delayAmount": "Quanto esperar",
+        "delayUnit": "Unidade",
+        "unitMinutes": "minutos",
+        "unitHours": "horas",
+        "unitDays": "dias",
+        "willSendAt": "Será enviado em {time}",
+        "scheduleHint": "A lista de destinatários é fixada agora. Contatos adicionados depois não serão incluídos.",
+        "scheduleButton": "Agendar transmissão",
+        "scheduling": "Agendando...",
+        "confirmScheduleTitle": "Confirmar agendamento",
+        "confirmScheduleDesc": "Esta transmissão será enviada para <b>{count, number}</b> {count, plural, =1 {contato} other {contatos}} usando o modelo <b>{template}</b> em <b>{time}</b>. Você pode alterar o horário ou cancelar até lá.",
+        "errInvalid": "Informe um horário de envio válido.",
+        "errTooSoon": "Escolha um horário com pelo menos 5 minutos a partir de agora.",
+        "errTooFar": "Escolha um horário nos próximos 90 dias."
       }
     },
     "sending": {

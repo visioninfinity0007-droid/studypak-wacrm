@@ -1048,7 +1048,8 @@
       },
       "errorLoad": "브로드캐스트를 불러오지 못했습니다",
       "broadcastInProgress": "브로드캐스트 진행 중",
-      "retry": "다시 시도"
+      "retry": "다시 시도",
+      "scheduledFor": "{time} 발송"
     },
     "status": {
       "draft": "초안",
@@ -1117,7 +1118,21 @@
       "toastQueueNudged": "Sending started on the server.",
       "continueDraft": "Continue",
       "continueDraftHover": "Open this draft to review and send it",
-      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send."
+      "draftHint": "This campaign is a draft: nothing has been sent yet. Press Continue to review it and send.",
+      "scheduledTitle": "{time}에 예약됨",
+      "scheduledTitleNoTime": "예약됨",
+      "scheduledHint": "아직 아무것도 보내지 않았습니다. 수신자 {count, number}명이 저장되어 있으며 그 시간에 받게 됩니다.",
+      "scheduleSendNow": "지금 보내기",
+      "scheduleChange": "시간 변경",
+      "scheduleSave": "시간 저장",
+      "scheduleCancel": "예약 취소",
+      "scheduleCancelHover": "이 캠페인의 발송을 멈춥니다. 나중에 수정해서 보낼 수 있는 초안이 됩니다.",
+      "scheduleErrTooSoon": "지금부터 최소 5분 이후의 시간을 선택하세요.",
+      "scheduleErrTooFar": "앞으로 90일 이내의 시간을 선택하세요.",
+      "toastRescheduled": "발송 시간이 {time}(으)로 변경되었습니다",
+      "toastScheduleSendNow": "발송을 시작했습니다",
+      "toastScheduleCancelled": "예약이 취소되었습니다. 캠페인이 다시 초안이 되었습니다.",
+      "toastScheduleFailed": "예약을 업데이트하지 못했습니다: {error}"
     },
     "new": {
       "title": "새 브로드캐스트",
@@ -1137,7 +1152,8 @@
       "draftLoading": "Loading draft…",
       "draftNotFound": "This draft no longer exists or has already been sent.",
       "draftTemplateMissing": "Template “{name}” is no longer approved. Choose a template to continue.",
-      "continuingDraft": "Continuing draft “{name}”. Review and press Send now."
+      "continuingDraft": "Continuing draft “{name}”. Review and press Send now.",
+      "toastScheduled": "{time}에 브로드캐스트가 예약되었습니다"
     },
     "wizard": {
       "next": "다음",
@@ -1259,7 +1275,27 @@
         "alreadySent": "{count, number} {count, plural, =1 {student} other {students}} in this audience already received the \"{template}\" template in an earlier campaign.",
         "resendAlreadySent": "Send to {count, plural, =1 {this student} other {these {count, number} students}} again",
         "resendOff": "Not ticked: they will be skipped, and only the others receive this message.",
-        "resendOn": "Ticked: they will receive this message again."
+        "resendOn": "Ticked: they will receive this message again.",
+        "whenTitle": "보낼 시점",
+        "optionNow": "지금 보내기",
+        "optionLater": "나중으로 예약",
+        "afterDelay": "일정 시간 후",
+        "atTime": "지정한 날짜와 시간",
+        "delayPrefix": "다음 시간 후 보내기:",
+        "delayAmount": "대기 시간",
+        "delayUnit": "단위",
+        "unitMinutes": "분",
+        "unitHours": "시간",
+        "unitDays": "일",
+        "willSendAt": "{time}에 보내집니다",
+        "scheduleHint": "수신자 목록은 지금 확정됩니다. 나중에 대상에 추가된 연락처는 포함되지 않습니다.",
+        "scheduleButton": "브로드캐스트 예약",
+        "scheduling": "예약 중...",
+        "confirmScheduleTitle": "예약 확인",
+        "confirmScheduleDesc": "이 브로드캐스트는 <b>{template}</b> 템플릿으로 <b>{time}</b>에 <b>{count, number}</b>명의 연락처에게 보내집니다. 그 전까지 시간을 바꾸거나 취소할 수 있습니다.",
+        "errInvalid": "올바른 발송 시간을 입력하세요.",
+        "errTooSoon": "지금부터 최소 5분 이후의 시간을 선택하세요.",
+        "errTooFar": "앞으로 90일 이내의 시간을 선택하세요."
       }
     },
     "sending": {

@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { countAlreadySent, countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
+import {
+  SCHEDULE_MIN_LEAD_MS,
+  checkScheduledAt,
+  scheduleFromDelay,
+  type DelayUnit,
+} from '@/lib/broadcast-schedule';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { estimateBroadcastCost } from '@/lib/broadcast-cost';
@@ -17,8 +23,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { AlertTriangle, ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Send, Loader2, Users, Save, Clock } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+
+/** Local "YYYY-MM-DDTHH:mm" for a datetime-local input. */
+function toLocalInputValue(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 interface Step4Props {
   name: string;
@@ -28,7 +41,8 @@ interface Step4Props {
   /** Also send to students who already received this template. */
   resendAlreadySent: boolean;
   onResendAlreadySentChange: (resend: boolean) => void;
-  onSend: () => void;
+  /** No argument: send now. An ISO time: schedule for then. */
+  onSend: (scheduledAt?: string) => void;
   onSaveDraft?: () => void;
   onBack: () => void;
   isProcessing: boolean;
@@ -54,6 +68,20 @@ export function Step4ScheduleSend({
   const [rateError, setRateError] = useState<string | null>(null);
   const [loadingRate, setLoadingRate] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
+  // When to send. "later" is either a delay from the moment the button
+  // is pressed ("after 3 hours") or a fixed local date and time.
+  const [sendMode, setSendMode] = useState<'now' | 'later'>('now');
+  const [laterKind, setLaterKind] = useState<'delay' | 'exact'>('delay');
+  const [delayAmount, setDelayAmount] = useState('1');
+  const [delayUnit, setDelayUnit] = useState<DelayUnit>('hours');
+  const [exactValue, setExactValue] = useState(() => toLocalInputValue(Date.now() + 60 * 60_000));
+  // Re-read the clock every 30 s so the "will send on" line stays true
+  // for a delay while the page sits open.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
   // Students in this audience who already received this template —
@@ -122,6 +150,31 @@ export function Step4ScheduleSend({
     ? null
     : estimateBroadcastCost(sendReach, ratePkr);
   const costIsConfigured = ratePkr !== null && !loadingRate && !rateError;
+
+  // The send time the current choices produce, against `at` (ms).
+  function scheduledTimeAt(at: number): Date | null {
+    if (laterKind === 'delay') {
+      const amount = Number(delayAmount);
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      return scheduleFromDelay(amount, delayUnit, at);
+    }
+    const ms = Date.parse(exactValue); // datetime-local → browser's local time
+    return Number.isFinite(ms) ? new Date(ms) : null;
+  }
+  const previewTime = sendMode === 'later' ? scheduledTimeAt(clock) : null;
+  const scheduleCheck = sendMode === 'later'
+    ? checkScheduledAt(previewTime ?? 'invalid', clock)
+    : null;
+  const scheduleError = scheduleCheck && !scheduleCheck.ok
+    ? {
+        invalid: t('scheduleSend.errInvalid'),
+        too_soon: t('scheduleSend.errTooSoon'),
+        too_far: t('scheduleSend.errTooFar'),
+      }[scheduleCheck.reason]
+    : null;
+  const canSubmit = Boolean(name.trim()) && !isProcessing && costIsConfigured && !scheduleError;
+  const formatTime = (d: Date) =>
+    d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
   const audienceLabel =
     audience.type === 'all'
@@ -209,6 +262,108 @@ export function Step4ScheduleSend({
         </div>
       )}
 
+      {/* When to send */}
+      <div className="space-y-3 rounded-xl border border-border p-4">
+        <p className="text-sm font-medium text-foreground">{t('scheduleSend.whenTitle')}</p>
+        <div className="flex flex-wrap gap-4 text-sm text-foreground">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="send-mode"
+              checked={sendMode === 'now'}
+              onChange={() => setSendMode('now')}
+              disabled={isProcessing}
+            />
+            {t('scheduleSend.optionNow')}
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="send-mode"
+              checked={sendMode === 'later'}
+              onChange={() => setSendMode('later')}
+              disabled={isProcessing}
+            />
+            {t('scheduleSend.optionLater')}
+          </label>
+        </div>
+
+        {sendMode === 'later' && (
+          <div className="space-y-3 border-t border-border pt-3">
+            <div className="flex flex-wrap gap-4 text-sm text-foreground">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="later-kind"
+                  checked={laterKind === 'delay'}
+                  onChange={() => setLaterKind('delay')}
+                  disabled={isProcessing}
+                />
+                {t('scheduleSend.afterDelay')}
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="later-kind"
+                  checked={laterKind === 'exact'}
+                  onChange={() => setLaterKind('exact')}
+                  disabled={isProcessing}
+                />
+                {t('scheduleSend.atTime')}
+              </label>
+            </div>
+
+            {laterKind === 'delay' ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                <span>{t('scheduleSend.delayPrefix')}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={delayAmount}
+                  onChange={(e) => setDelayAmount(e.target.value)}
+                  disabled={isProcessing}
+                  aria-label={t('scheduleSend.delayAmount')}
+                  className="w-24 border-border bg-muted text-foreground"
+                />
+                <select
+                  value={delayUnit}
+                  onChange={(e) => setDelayUnit(e.target.value as DelayUnit)}
+                  disabled={isProcessing}
+                  aria-label={t('scheduleSend.delayUnit')}
+                  className="h-9 rounded-md border border-border bg-muted px-2 text-foreground"
+                >
+                  <option value="minutes">{t('scheduleSend.unitMinutes')}</option>
+                  <option value="hours">{t('scheduleSend.unitHours')}</option>
+                  <option value="days">{t('scheduleSend.unitDays')}</option>
+                </select>
+              </div>
+            ) : (
+              <Input
+                type="datetime-local"
+                value={exactValue}
+                min={toLocalInputValue(clock + SCHEDULE_MIN_LEAD_MS)}
+                onChange={(e) => setExactValue(e.target.value)}
+                disabled={isProcessing}
+                aria-label={t('scheduleSend.atTime')}
+                className="w-fit border-border bg-muted text-foreground"
+              />
+            )}
+
+            {scheduleError ? (
+              <p role="alert" className="text-sm text-destructive">{scheduleError}</p>
+            ) : previewTime ? (
+              <p className="flex items-center gap-1.5 text-sm text-foreground">
+                <Clock className="h-3.5 w-3.5 text-primary" />
+                {t('scheduleSend.willSendAt', { time: formatTime(previewTime) })}
+              </p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">{t('scheduleSend.scheduleHint')}</p>
+          </div>
+        )}
+      </div>
+
       {/* Indicative pricing: a configurable rate, not Meta's live rate card. */}
       <div className="space-y-2 rounded-xl border border-border p-4">
         <p className="text-sm font-medium text-foreground">Estimated broadcast cost (PKR)</p>
@@ -232,7 +387,9 @@ export function Step4ScheduleSend({
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <p className="text-sm font-medium text-foreground">{t('scheduleSend.sending')}</p>
+              <p className="text-sm font-medium text-foreground">
+                {sendMode === 'later' ? t('scheduleSend.scheduling') : t('scheduleSend.sending')}
+              </p>
             </div>
             <span className="text-xs font-medium text-primary">{progress}%</span>
           </div>
@@ -273,25 +430,36 @@ export function Step4ScheduleSend({
           <DialogTrigger
             render={
               <Button
-                disabled={!name.trim() || isProcessing || !costIsConfigured}
+                disabled={!canSubmit}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               />
             }
           >
-            <Send className="h-4 w-4" />
-            {t('scheduleSend.sendNow')}
+            {sendMode === 'later' ? <Clock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            {sendMode === 'later' ? t('scheduleSend.scheduleButton') : t('scheduleSend.sendNow')}
           </DialogTrigger>
           <DialogContent className="border-border bg-popover sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-popover-foreground">{t('scheduleSend.confirmTitle')}</DialogTitle>
+              <DialogTitle className="text-popover-foreground">
+                {sendMode === 'later' ? t('scheduleSend.confirmScheduleTitle') : t('scheduleSend.confirmTitle')}
+              </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                {t.rich('scheduleSend.confirmDesc', {
-                  count: sendReach,
-                  template: template.name,
-                  b: (chunks) => (
-                    <span className="font-medium text-popover-foreground">{chunks}</span>
-                  ),
-                })}
+                {sendMode === 'later' && previewTime
+                  ? t.rich('scheduleSend.confirmScheduleDesc', {
+                      count: sendReach,
+                      template: template.name,
+                      time: formatTime(previewTime),
+                      b: (chunks) => (
+                        <span className="font-medium text-popover-foreground">{chunks}</span>
+                      ),
+                    })
+                  : t.rich('scheduleSend.confirmDesc', {
+                      count: sendReach,
+                      template: template.name,
+                      b: (chunks) => (
+                        <span className="font-medium text-popover-foreground">{chunks}</span>
+                      ),
+                    })}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -303,16 +471,28 @@ export function Step4ScheduleSend({
                 {t('cancel')}
               </Button>
               <Button
-                disabled={!costIsConfigured}
+                disabled={!canSubmit}
                 onClick={() => {
-                  if (!costIsConfigured) return;
+                  if (!canSubmit) return;
                   setShowConfirm(false);
-                  onSend();
+                  if (sendMode === 'now') {
+                    onSend();
+                    return;
+                  }
+                  // A delay counts from this click, not from when the page
+                  // opened; recheck in case the time slipped past the limit.
+                  const at = scheduledTimeAt(Date.now());
+                  const check = checkScheduledAt(at ?? 'invalid', Date.now());
+                  if (!check.ok) {
+                    setClock(Date.now());
+                    return;
+                  }
+                  onSend(check.iso);
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                <Send className="h-4 w-4" />
-                {t('scheduleSend.sendNow')}
+                {sendMode === 'later' ? <Clock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                {sendMode === 'later' ? t('scheduleSend.scheduleButton') : t('scheduleSend.sendNow')}
               </Button>
             </DialogFooter>
           </DialogContent>
