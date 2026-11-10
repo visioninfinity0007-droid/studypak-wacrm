@@ -26,6 +26,7 @@ function fakeDb(tables: Record<string, Row[]>) {
       const [col, op, ...rest] = p.split('.');
       const val = rest.join('.');
       if (op === 'is' && val === 'null') return (r: Row) => r[col] == null;
+      if (op === 'eq') return (r: Row) => String(r[col]) === val;
       if (op === 'lt') return (r: Row) => r[col] != null && cmp(r[col], val) < 0;
       if (op === 'lte') return (r: Row) => r[col] != null && cmp(r[col], val) <= 0;
       throw new Error(`unsupported or(): ${p}`);
@@ -266,6 +267,23 @@ describe('runQueueTick', () => {
     tables.broadcasts[0].scheduled_at = new Date(T0 - 1).toISOString();
     const [res] = await runQueueTick(db, T0 + 50_000, { send, sleep, now });
     expect(res).toMatchObject({ sent: 1, finished: true });
+    expect(tables.broadcasts[0].status).toBe('sent');
+  });
+
+  it('does not let campaigns scheduled for later crowd a due one out of the batch', async () => {
+    const { db, tables } = world({ recipients: [{}] });
+    tables.broadcasts[0].status = 'scheduled';
+    tables.broadcasts[0].scheduled_at = new Date(T0 - 1).toISOString();
+    tables.broadcasts[0].updated_at = '2026-10-22T09:59:00Z';
+    for (let i = 0; i < 30; i++) {
+      tables.broadcasts.push({
+        id: `future${i}`, account_id: 'acc', status: 'scheduled',
+        scheduled_at: new Date(T0 + 86_400_000).toISOString(), updated_at: '2026-10-01T00:00:00Z',
+      });
+    }
+    const send = vi.fn(async () => ({ messageId: 'w' }));
+    const results = await runQueueTick(db, T0 + 50_000, { send, sleep, now });
+    expect(results.map((r) => r.broadcastId)).toEqual(['b1']);
     expect(tables.broadcasts[0].status).toBe('sent');
   });
 });

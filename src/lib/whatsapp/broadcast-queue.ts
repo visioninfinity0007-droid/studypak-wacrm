@@ -325,10 +325,13 @@ export async function runQueueTick(
 ): Promise<DrainResult[]> {
   if (isSendingPaused()) return [];
   const now = deps.now ?? Date.now;
+  // Only due work: campaigns scheduled for later stay out of the scan,
+  // so a long list of them can't fill the batch ahead of due ones.
   const { data, error } = await db
     .from('broadcasts')
     .select('id, status, scheduled_at')
     .in('status', ['sending', 'scheduled'])
+    .or(`status.eq.sending,scheduled_at.is.null,scheduled_at.lte.${new Date(now()).toISOString()}`)
     .order('updated_at', { ascending: true })
     .limit(25);
   if (error) throw new Error(`queue scan failed: ${error.message}`);
