@@ -3160,6 +3160,17 @@
     }
   },
   "Admin": {
+    "platformLabel": "Study in Pakistan",
+    "portalTitle": "Admin portal",
+    "portalDescription": "Manage every college, monitor platform activity and keep campaign delivery on track from one place.",
+    "metricColleges": "Colleges",
+    "metricCollegesDetail": "{active} active",
+    "metricUsers": "Portal users",
+    "metricUsersDetail": "Across all colleges",
+    "metricContacts": "Managed contacts",
+    "metricContactsDetail": "{connected} WhatsApp connections",
+    "metricCampaigns": "Campaigns",
+    "metricCampaignsDetail": "Across the platform",
     "title": "Colleges",
     "description": "Create and manage college accounts. Each college has its own logins, contacts, campaigns and WhatsApp number.",
     "notAllowed": "Only platform administrators can manage colleges.",
