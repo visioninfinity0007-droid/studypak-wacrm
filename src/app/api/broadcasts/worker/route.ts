@@ -1,9 +1,9 @@
 // ============================================================
 // GET /api/broadcasts/worker — broadcast queue tick (contract req. 4).
 //
-// Called every minute by the host's scheduler. Self-hosted/Coolify callers
-// use the shared `x-cron-secret` header; Vercel Cron sends its standard
-// `Authorization: Bearer <CRON_SECRET>` header. Each tick drains every broadcast with
+// Called every minute by the host's scheduler (a Coolify scheduled task
+// on the VPS) with the shared `x-cron-secret` header, same secret and
+// check as /api/automations/cron. Each tick drains every broadcast with
 // due work — retries whose back-off has passed, passes cut short by a
 // deadline or a crash, scheduled campaigns that came due — for up to
 // ~50 s, so ticks don't pile up. Concurrent ticks are safe: only the
@@ -17,36 +17,21 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { supabaseServiceRole } from '@/lib/supabase/admin';
-import { verifyGithubActionsToken } from '@/lib/github-actions-oidc';
 import { runQueueTick } from '@/lib/whatsapp/broadcast-queue';
 
 export const maxDuration = 120;
 const TICK_BUDGET_MS = 50_000;
 
-function secretMatches(supplied: string, expected: string | undefined): boolean {
-  if (!expected) return false;
-  const got = Buffer.from(supplied);
+function authorized(request: Request): boolean | null {
+  const expected = process.env.AUTOMATION_CRON_SECRET;
+  if (!expected) return null;
+  const supplied = Buffer.from(request.headers.get('x-cron-secret') ?? '');
   const want = Buffer.from(expected);
-  return got.length === want.length && timingSafeEqual(got, want);
-}
-
-export async function authorized(request: Request): Promise<boolean | null> {
-  const selfHostedSecret = process.env.AUTOMATION_CRON_SECRET;
-  const vercelSecret = process.env.CRON_SECRET;
-  const customHeader = request.headers.get('x-cron-secret') ?? '';
-  const authorization = request.headers.get('authorization') ?? '';
-  const bearer = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-
-  if (
-    secretMatches(customHeader, selfHostedSecret) ||
-    secretMatches(bearer, vercelSecret)
-  ) return true;
-  if (bearer && await verifyGithubActionsToken(bearer)) return true;
-  return selfHostedSecret || vercelSecret || bearer ? false : null;
+  return supplied.length === want.length && timingSafeEqual(supplied, want);
 }
 
 export async function GET(request: Request) {
-  const ok = await authorized(request);
+  const ok = authorized(request);
   if (ok === null) return NextResponse.json({ error: 'cron not configured' }, { status: 503 });
   if (!ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
