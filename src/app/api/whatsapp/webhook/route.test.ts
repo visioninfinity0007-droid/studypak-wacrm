@@ -338,6 +338,27 @@ async function runWebhook(
   return res
 }
 
+async function runMobileEcho(message: Record<string, unknown>) {
+  const body = {
+    entry: [
+      {
+        changes: [
+          {
+            field: 'smb_message_echoes',
+            value: {
+              metadata: { phone_number_id: 'pn-1' },
+              message_echoes: [message],
+            },
+          },
+        ],
+      },
+    ],
+  }
+  const res = await POST(signedPost(JSON.stringify(body)))
+  for (const cb of h.state.afterCallbacks) await cb()
+  return res
+}
+
 /** A message-status webhook (sent / delivered / read / failed). */
 async function runStatusWebhook(status: Record<string, unknown>) {
   const body = {
@@ -441,6 +462,53 @@ describe('inbound webhook: idempotent insert (#367)', () => {
     expect(h.runAutomationsForTrigger).not.toHaveBeenCalled()
     expect(h.dispatchInboundToAiReply).not.toHaveBeenCalled()
     expect(h.dispatchWebhookEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('WhatsApp Business mobile app message echoes', () => {
+  const mobileReply = {
+    id: 'wamid.MOBILE1',
+    from: '15550001111',
+    to: '15551230000',
+    timestamp: '1700000000',
+    type: 'text',
+    text: { body: 'Reply sent from the phone' },
+  }
+
+  it('stores a mobile reply as an outbound agent message', async () => {
+    await runMobileEcho(mobileReply)
+
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.upsertCalls[0]).toMatchObject({
+      row: {
+        conversation_id: 'conv-1',
+        sender_type: 'agent',
+        sender_id: null,
+        content_type: 'text',
+        content_text: 'Reply sent from the phone',
+        message_id: 'wamid.MOBILE1',
+        status: 'sent',
+      },
+      options: {
+        onConflict: 'conversation_id,message_id',
+        ignoreDuplicates: true,
+      },
+    })
+    expect(h.state.rpcCalls).toHaveLength(0)
+    expect(h.dispatchInboundToFlows).not.toHaveBeenCalled()
+    expect(h.runAutomationsForTrigger).not.toHaveBeenCalled()
+    expect(h.dispatchInboundToAiReply).not.toHaveBeenCalled()
+  })
+
+  it('ignores a replayed mobile echo without inbound side effects', async () => {
+    h.state.messageUpsertResult = []
+
+    await runMobileEcho(mobileReply)
+
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.rpcCalls).toHaveLength(0)
+    expect(h.dispatchInboundToFlows).not.toHaveBeenCalled()
+    expect(h.runAutomationsForTrigger).not.toHaveBeenCalled()
   })
 })
 

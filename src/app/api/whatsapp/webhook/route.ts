@@ -1,7 +1,7 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
-import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
+import { getMediaUrl } from '@/lib/whatsapp/meta-api'
 import { mirrorInboundMedia } from '@/lib/whatsapp/mirror-inbound-media'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
 import {
@@ -65,6 +65,8 @@ interface WhatsAppMessage {
    * `@/lib/whatsapp/wa-identity`.
    */
   from?: string
+  /** Recipient phone number. Present on Business App message echoes. */
+  to?: string
   /** Sender's business-scoped user ID (BSUID). */
   from_user_id?: string
   /** Sender's portfolio-level BSUID. */
@@ -129,6 +131,8 @@ interface WhatsAppWebhookEntry {
         parent_user_id?: string
       }>
       messages?: WhatsAppMessage[]
+      /** Messages sent from the linked WhatsApp Business mobile app. */
+      message_echoes?: WhatsAppMessage[]
       statuses?: Array<{
         id: string
         status: string
@@ -336,8 +340,16 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         }
       }
 
-      // Handle incoming messages
-      if (!value.messages || !value.contacts) continue
+      // Coexistence accounts emit replies sent from the linked WhatsApp
+      // Business mobile app under `smb_message_echoes`. These are outbound
+      // messages and deliberately do not include `contacts`.
+      const messageEchoes =
+        change.field === 'smb_message_echoes'
+          ? value.message_echoes ?? value.messages
+          : undefined
+      const hasInboundMessages =
+        !!value.messages?.length && !!value.contacts?.length
+      if (!hasInboundMessages && !messageEchoes?.length) continue
 
       const phoneNumberId = value.metadata.phone_number_id
 
@@ -358,9 +370,22 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
 
       const decryptedAccessToken = decrypt(config.access_token)
 
-      for (let i = 0; i < value.messages.length; i++) {
-        const message = value.messages[i]
-        const contact = value.contacts[i] || value.contacts[0]
+      if (messageEchoes?.length) {
+        for (const message of messageEchoes) {
+          await processMessageEcho(
+            message,
+            config.account_id,
+            config.user_id,
+            decryptedAccessToken,
+            config.mirror_inbound_media !== false
+          )
+        }
+        continue
+      }
+
+      for (let i = 0; i < value.messages!.length; i++) {
+        const message = value.messages![i]
+        const contact = value.contacts![i] || value.contacts![0]
 
         await processMessage(
           message,
@@ -380,6 +405,130 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         )
       }
     }
+  }
+}
+
+const ALLOWED_CONTENT_TYPES = new Set([
+  'text',
+  'image',
+  'document',
+  'audio',
+  'video',
+  'location',
+  'template',
+  'interactive',
+])
+
+function persistedContentType(type: string) {
+  if (ALLOWED_CONTENT_TYPES.has(type)) return type
+  if (type === 'sticker') return 'image'
+  if (type === 'button') return 'interactive'
+  return 'text'
+}
+
+/** Persist a reply sent from the linked WhatsApp Business mobile app. */
+async function processMessageEcho(
+  message: WhatsAppMessage,
+  accountId: string,
+  configOwnerUserId: string,
+  accessToken: string,
+  mirrorMedia: boolean
+) {
+  const customerPhone = normalizePhone(message.to ?? '')
+  if (!customerPhone) {
+    console.error(
+      '[webhook] mobile message echo has no recipient; skipping:',
+      message.id
+    )
+    return
+  }
+
+  const identity: WaIdentity = {
+    phone: customerPhone,
+    waUserId: null,
+    waParentUserId: null,
+    waUsername: null,
+    name: '',
+  }
+  const contactOutcome = await findOrCreateContact(
+    accountId,
+    configOwnerUserId,
+    identity
+  )
+  if (!contactOutcome) return
+
+  const convResult = await findOrCreateConversation(
+    accountId,
+    configOwnerUserId,
+    contactOutcome.contact.id
+  )
+  if (!convResult) return
+  const conversation = convResult.conversation
+
+  if (convResult.created) {
+    await dispatchWebhookEvent(supabaseAdmin(), accountId, 'conversation.created', {
+      conversation_id: conversation.id,
+      contact_id: contactOutcome.contact.id,
+    })
+  }
+
+  const { contentText, mediaUrl, mediaType } = await parseMessageContent(
+    message,
+    accessToken,
+    mirrorMedia ? { accountId } : null
+  )
+  let replyToInternalId: string | null = null
+  if (message.context?.id) {
+    replyToInternalId = await lookupInternalIdByMetaId(
+      message.context.id,
+      conversation.id
+    )
+  }
+
+  const sentAt =
+    metaTimestampToIso(message.timestamp) ?? new Date().toISOString()
+  const { data: insertedRows, error } = await supabaseAdmin()
+    .from('messages')
+    .upsert(
+      {
+        conversation_id: conversation.id,
+        sender_type: 'agent',
+        sender_id: null,
+        content_type: persistedContentType(message.type),
+        content_text: contentText,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        message_id: message.id,
+        status: 'sent',
+        created_at: sentAt,
+        reply_to_message_id: replyToInternalId,
+      },
+      { onConflict: 'conversation_id,message_id', ignoreDuplicates: true }
+    )
+    .select('id')
+
+  if (error) {
+    console.error('[webhook] error inserting mobile message echo:', error)
+    return
+  }
+  if (!insertedRows?.length) {
+    console.info('[webhook] duplicate mobile message echo ignored:', message.id)
+    return
+  }
+
+  const { error: conversationError } = await supabaseAdmin()
+    .from('conversations')
+    .update({
+      last_message_text: contentText || `[${message.type}]`,
+      last_message_at: sentAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', conversation.id)
+  if (conversationError) {
+    console.error(
+      '[webhook] error updating conversation for mobile echo:',
+      conversationError
+    )
   }
 }
 
@@ -651,17 +800,7 @@ async function processMessage(
   //   text, image, document, audio, video, location, template, interactive
   // Map incoming WhatsApp types that aren't in that list to the closest
   // allowed value so the INSERT doesn't fail with a constraint error.
-  const ALLOWED_CONTENT_TYPES = new Set([
-    'text', 'image', 'document', 'audio', 'video',
-    'location', 'template', 'interactive',
-  ])
-  const contentType = ALLOWED_CONTENT_TYPES.has(message.type)
-    ? message.type
-    : message.type === 'sticker'
-      ? 'image'         // stickers are images
-      : message.type === 'button'
-        ? 'interactive' // template quick-reply tap (issue #478)
-        : 'text'        // reaction, unknown → text fallback
+  const contentType = persistedContentType(message.type)
 
   const receivedAt = new Date(parseInt(message.timestamp) * 1000).toISOString()
 

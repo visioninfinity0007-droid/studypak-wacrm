@@ -43,7 +43,20 @@ export function applyRealtimeInsert(prev: Message[], row: Message): Message[] {
 }
 
 export function confirmedSendUpdate(response: unknown): Partial<Message> {
-  const messageId = (response as { message_id?: unknown } | null)?.message_id;
+  const payload = response as {
+    message_id?: unknown;
+    message?: unknown;
+  } | null;
+  const row = payload?.message;
+  if (
+    row &&
+    typeof row === "object" &&
+    typeof (row as Partial<Message>).id === "string" &&
+    typeof (row as Partial<Message>).conversation_id === "string"
+  ) {
+    return row as Message;
+  }
+  const messageId = payload?.message_id;
   return typeof messageId === "string" && messageId
     ? { status: "sent", id: messageId }
     : { status: "sent" };

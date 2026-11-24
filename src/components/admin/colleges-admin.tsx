@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Activity, Building2, Copy, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Activity, Building2, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { LoginDialog, type Login } from './login-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import type { CollegeStatus } from '@/lib/admin/college-status';
 
@@ -47,11 +48,6 @@ interface College {
   broadcasts: number;
   whatsapp: { connected: boolean; phoneNumberIdTail: string } | null;
   broadcastRatePkr: number | null;
-}
-
-interface Login {
-  email: string;
-  tempPassword: string;
 }
 
 const STATUS_VARIANT: Record<CollegeStatus, 'default' | 'secondary' | 'destructive'> = {
@@ -403,58 +399,6 @@ function CreateCollegeDialog({
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {t('create')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function LoginDialog({
-  value,
-  onClose,
-}: {
-  value: { title: string; login: Login } | null;
-  onClose: () => void;
-}) {
-  const t = useTranslations('Admin');
-  const text = value
-    ? t('loginShareText', { email: value.login.email, password: value.login.tempPassword })
-    : '';
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(t('copied'));
-    } catch {
-      toast.error(t('clipboardBlocked'));
-    }
-  }
-
-  return (
-    <Dialog open={!!value} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-popover border-border sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-popover-foreground">{value?.title}</DialogTitle>
-          <DialogDescription className="text-muted-foreground">{t('loginOnce')}</DialogDescription>
-        </DialogHeader>
-        {value && (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="text-muted-foreground">{t('loginEmail')}</Label>
-              <Input readOnly value={value.login.email} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-muted-foreground">{t('loginPassword')}</Label>
-              <Input readOnly value={value.login.tempPassword} className="font-mono" />
-            </div>
-          </div>
-        )}
-        <DialogFooter className="bg-popover border-border">
-          <Button variant="outline" onClick={() => void copy()}>
-            <Copy className="h-4 w-4" />
-            {t('copy')}
-          </Button>
-          <Button onClick={onClose}>{t('done')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

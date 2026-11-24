@@ -73,6 +73,19 @@ describe("applyRealtimeInsert", () => {
 });
 
 describe("confirmedSendUpdate", () => {
+  it("uses the full persisted row when the send response includes it", () => {
+    const row = msg("real-1", {
+      content_text: "saved text",
+      message_id: "wamid.1",
+      status: "sent",
+    });
+    expect(confirmedSendUpdate({
+      success: true,
+      message_id: "real-1",
+      message: row,
+    })).toEqual(row);
+  });
+
   it("carries the persisted row id from the send response", () => {
     expect(confirmedSendUpdate({ success: true, message_id: "real-1" })).toEqual({
       status: "sent",

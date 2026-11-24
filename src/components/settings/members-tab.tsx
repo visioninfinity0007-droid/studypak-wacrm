@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
+  KeyRound,
   Loader2,
   Mail,
   MailX,
@@ -74,6 +75,7 @@ import {
 } from '@/components/presence/presence-dot';
 import { InviteMemberDialog } from './invite-member-dialog';
 import { SettingsPanelHead } from './settings-panel-head';
+import { LoginDialog, type Login } from '@/components/admin/login-dialog';
 import { ROLE_META } from './role-meta';
 
 interface Member {
@@ -127,7 +129,9 @@ function fmtExpiresIn(iso: string, t: (key: string, values?: Record<string, stri
 export function MembersTab() {
   const t = useTranslations('Settings.members');
   const tRoles = useTranslations('Settings.roles');
-  const { user, canManageMembers } = useAuth();
+  const tAdmin = useTranslations('Admin');
+  const [issuedLogin, setIssuedLogin] = useState<{ title: string; login: Login } | null>(null);
+  const { user, canManageMembers, isPlatformAdmin } = useAuth();
   const { getPresence, getRow, now } = usePresence();
 
   const [members, setMembers] = useState<Member[]>([]);
@@ -222,6 +226,31 @@ export function MembersTab() {
         ),
       );
       console.error('[MembersTab] role change error:', err);
+      toast.error(t('networkError'));
+    } finally {
+      setPendingMemberAction(null);
+    }
+  }
+
+  async function issuePassword(member: Member) {
+    if (!member.email) return;
+    if (!window.confirm(tAdmin('resetConfirm', { email: member.email }))) return;
+    setPendingMemberAction(member.user_id);
+    try {
+      const res = await fetch(`/api/account/members/${member.user_id}/reset-password`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'StudyPak' },
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        toast.error(payload.error || t('issuePasswordFailed'));
+        return;
+      }
+      setIssuedLogin({
+        title: tAdmin('newPasswordTitle', { college: member.full_name || member.email || t('unnamed') }),
+        login: payload.login,
+      });
+    } catch {
       toast.error(t('networkError'));
     } finally {
       setPendingMemberAction(null);
@@ -447,6 +476,19 @@ export function MembersTab() {
                       </span>
                     )}
 
+                    {isPlatformAdmin && canManageMembers && !isOwnerRow && !isSelf && member.email && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pendingMemberAction !== null}
+                        aria-label={`${tAdmin('resetPassword')} (${member.email})`}
+                        title={tAdmin('resetPassword')}
+                        onClick={() => void issuePassword(member)}
+                      >
+                        <KeyRound className="size-4" />
+                      </Button>
+                    )}
+
                     {/* Remove. Admin+ only; never on the owner row;
                         never on yourself. Pre-polish styling was
                         neutral-default + red-on-hover — the
@@ -472,6 +514,8 @@ export function MembersTab() {
           </ul>
         </CardContent>
       </Card>
+
+      <LoginDialog value={issuedLogin} onClose={() => setIssuedLogin(null)} />
 
       {/* Pending invitations — admin+ only */}
       <RequireRole min="admin">

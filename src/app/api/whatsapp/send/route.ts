@@ -175,6 +175,7 @@ export async function POST(request: Request) {
         success: true,
         message_id: result.messageId,
         whatsapp_message_id: result.whatsappMessageId,
+        message: result.message,
       })
     } catch (err) {
       if (err instanceof SendMessageError) {

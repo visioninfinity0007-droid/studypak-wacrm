@@ -244,7 +244,19 @@ function sendPathDb(
           }
           if (table === 'whatsapp_config') return { data: config, error: null };
           if (table === 'messages') {
-            return { data: { id: 'msg-1' }, error: null };
+            return {
+              data: {
+                id: 'msg-1',
+                conversation_id: 'cv-1',
+                sender_type: 'agent',
+                content_type: captured.message?.content_type ?? 'text',
+                content_text: captured.message?.content_text ?? null,
+                status: 'sent',
+                created_at: '2026-01-01T00:00:00.000Z',
+                ...captured.message,
+              },
+              error: null,
+            };
           }
           return { data: null, error: null };
         },
@@ -285,6 +297,11 @@ describe('sendMessageToConversation — template persistence (#483)', () => {
     );
 
     expect(result.whatsappMessageId).toBe('wamid.1');
+    expect(result.message).toMatchObject({
+      id: 'msg-1',
+      conversation_id: 'cv-1',
+      content_text: 'Your order A123 ships on Friday',
+    });
     // Was NULL before the fix — the Inbox rendered an empty bubble.
     expect(captured.message?.content_text).toBe(
       'Your order A123 ships on Friday'

@@ -1,0 +1,53 @@
+name: Scheduled broadcasts
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Recovery only. GitHub cron can be delayed by hours, so the active job
+    # below supplies the five-minute cadence and hands off before timeout.
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+
+concurrency:
+  group: scheduled-broadcasts
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    name: Send due campaigns
+    runs-on: ubuntu-latest
+    timeout-minutes: 310
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run first worker tick
+        run: .github/scripts/run-broadcast-worker.sh
+
+      - name: Keep five-minute schedule alive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          failures=0
+          for tick in $(seq 1 59); do
+            sleep 300
+            if ! .github/scripts/run-broadcast-worker.sh; then
+              failures=$((failures + 1))
+              echo "Worker tick ${tick} failed; the next tick will retry." >&2
+            fi
+          done
+
+          # workflow_dispatch events created by GITHUB_TOKEN are allowed to
+          # start a new run. It queues behind this run because concurrency is
+          # cancel-in-progress:false, creating a clean five-hour handoff.
+          gh workflow run scheduled-broadcasts.yml --ref main
+
+          if (( failures > 0 )); then
+            echo "${failures} worker tick(s) failed during this scheduler run." >&2
+            exit 1
+          fi

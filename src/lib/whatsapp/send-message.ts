@@ -42,7 +42,7 @@ import {
 } from '@/lib/whatsapp/phone-utils';
 import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity';
 import { applyPendingMessageStatuses } from '@/lib/whatsapp/message-status-sync';
-import type { MessageTemplate } from '@/types';
+import type { Message, MessageTemplate } from '@/types';
 import {
   resolveTemplateRow,
   templateBodyParams,
@@ -97,6 +97,8 @@ export interface SendMessageResult {
   messageId: string;
   /** Meta's `wamid` for the delivered message. */
   whatsappMessageId: string;
+  /** Full persisted row so the Inbox never depends on realtime to render it. */
+  message: Message;
 }
 
 /**
@@ -547,5 +549,9 @@ export async function sendMessageToConversation(
     );
   }
 
-  return { messageId: messageRecord.id, whatsappMessageId: waMessageId };
+  return {
+    messageId: messageRecord.id,
+    whatsappMessageId: waMessageId,
+    message: messageRecord as Message,
+  };
 }
