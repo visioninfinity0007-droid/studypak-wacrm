@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ runQueueTick: vi.fn(), verifyGithubActionsToken: vi.fn() }));
+const h = vi.hoisted(() => ({
+  runQueueTick: vi.fn(),
+  verifyGithubActionsToken: vi.fn(),
+  pruneExpiredPendingMessageStatuses: vi.fn(),
+}));
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseServiceRole: () => ({ service: true }),
@@ -8,6 +12,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 vi.mock('@/lib/whatsapp/broadcast-queue', () => ({
   runQueueTick: h.runQueueTick,
+}));
+
+vi.mock('@/lib/whatsapp/message-status-sync', () => ({
+  pruneExpiredPendingMessageStatuses: h.pruneExpiredPendingMessageStatuses,
 }));
 
 vi.mock('@/lib/github-actions-oidc', () => ({
@@ -26,6 +34,7 @@ beforeEach(() => {
   h.runQueueTick.mockResolvedValue([]);
   h.verifyGithubActionsToken.mockReset();
   h.verifyGithubActionsToken.mockResolvedValue(false);
+  h.pruneExpiredPendingMessageStatuses.mockReset();
 });
 
 afterEach(() => {
@@ -65,6 +74,7 @@ describe('GET /api/broadcasts/worker authentication', () => {
     expect(response.status).toBe(200);
     expect(h.verifyGithubActionsToken).toHaveBeenCalledWith('github-oidc-token');
     expect(h.runQueueTick).toHaveBeenCalledOnce();
+    expect(h.pruneExpiredPendingMessageStatuses).toHaveBeenCalledExactlyOnceWith({ service: true });
   });
 
   it('rejects a missing or incorrect token', async () => {
@@ -75,6 +85,7 @@ describe('GET /api/broadcasts/worker authentication', () => {
       headers: { authorization: 'Bearer wrong-secret' },
     }))).status).toBe(401);
     expect(h.runQueueTick).not.toHaveBeenCalled();
+    expect(h.pruneExpiredPendingMessageStatuses).not.toHaveBeenCalled();
   });
 
   it('reports a missing scheduler configuration', async () => {

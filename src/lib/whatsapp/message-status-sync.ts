@@ -37,6 +37,22 @@ interface PendingStatusRow {
 
 export const PENDING_STATUS_TTL_MS = 24 * 60 * 60 * 1000
 
+function pendingStatusCutoff(): string {
+  return new Date(Date.now() - PENDING_STATUS_TTL_MS).toISOString()
+}
+
+export async function pruneExpiredPendingMessageStatuses(db: SupabaseClient): Promise<void> {
+  try {
+    const { error } = await db
+      .from('pending_message_statuses')
+      .delete()
+      .lt('created_at', pendingStatusCutoff())
+    if (error) console.error('[message-status] pruning stale early statuses failed:', error.message)
+  } catch (error) {
+    console.error('[message-status] pruning stale early statuses failed:', error)
+  }
+}
+
 async function findAccountMessages(
   db: SupabaseClient,
   accountId: string,
@@ -106,15 +122,6 @@ async function storePendingStatus(
   )
   if (error) {
     console.error('[message-status] parking early status failed:', error.message)
-    return
-  }
-
-  const { error: pruneError } = await db
-    .from('pending_message_statuses')
-    .delete()
-    .lt('created_at', new Date(Date.now() - PENDING_STATUS_TTL_MS).toISOString())
-  if (pruneError) {
-    console.error('[message-status] pruning stale early statuses failed:', pruneError.message)
   }
 }
 
@@ -130,6 +137,7 @@ export async function applyPendingMessageStatuses(
     .select('status, error_code, error_title, error_details')
     .eq('account_id', accountId)
     .eq('wamid', wamid)
+    .gte('created_at', pendingStatusCutoff())
 
   if (error) {
     console.error('[message-status] early status lookup failed:', error.message)

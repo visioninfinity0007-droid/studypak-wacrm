@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   applyMessageStatus,
   applyPendingMessageStatuses,
+  pruneExpiredPendingMessageStatuses,
   type IncomingMessageStatus,
 } from './message-status-sync'
 
@@ -50,6 +51,10 @@ function fakeDb(tables: Record<string, Row[]>) {
       },
       lt(column: string, value: string) {
         filters.push((row) => String(row[column]) < value)
+        return builder
+      },
+      gte(column: string, value: string) {
+        filters.push((row) => String(row[column]) >= value)
         return builder
       },
       then(resolve: (result: { data: Row[]; error: null }) => unknown) {
@@ -143,14 +148,17 @@ describe('applyMessageStatus', () => {
     ])
   })
 
-  it('prunes parked statuses older than a day', async () => {
+  it('prunes parked statuses older than a day during scheduled cleanup', async () => {
     const tables: Record<string, Row[]> = {
       messages: [],
       pending_message_statuses: [
         { account_id: 'acc-1', wamid: 'wamid.old', status: 'sent', created_at: '2000-01-01T00:00:00.000Z' },
       ],
     }
-    await applyMessageStatus(fakeDb(tables), 'acc-1', status())
+    const db = fakeDb(tables)
+    await applyMessageStatus(db, 'acc-1', status())
+    expect(tables.pending_message_statuses.map((r) => r.wamid)).toEqual(['wamid.old', 'wamid.1'])
+    await pruneExpiredPendingMessageStatuses(db)
     expect(tables.pending_message_statuses.map((r) => r.wamid)).toEqual(['wamid.1'])
   })
 
@@ -166,7 +174,7 @@ describe('applyPendingMessageStatuses', () => {
     const tables: Record<string, Row[]> = {
       messages: [message()],
       pending_message_statuses: [
-        { account_id: 'acc-1', wamid: 'wamid.1', status: 'failed', error_code: 131026, error_title: 'Undeliverable', error_details: null },
+        { account_id: 'acc-1', wamid: 'wamid.1', status: 'failed', error_code: 131026, error_title: 'Undeliverable', error_details: null, created_at: new Date().toISOString() },
       ],
     }
     await applyPendingMessageStatuses(fakeDb(tables), 'acc-1', 'wamid.1')
@@ -178,8 +186,8 @@ describe('applyPendingMessageStatuses', () => {
     const tables: Record<string, Row[]> = {
       messages: [message()],
       pending_message_statuses: [
-        { account_id: 'acc-1', wamid: 'wamid.1', status: 'read', error_code: null },
-        { account_id: 'acc-1', wamid: 'wamid.1', status: 'delivered', error_code: null },
+        { account_id: 'acc-1', wamid: 'wamid.1', status: 'read', error_code: null, created_at: new Date().toISOString() },
+        { account_id: 'acc-1', wamid: 'wamid.1', status: 'delivered', error_code: null, created_at: new Date().toISOString() },
       ],
     }
     await applyPendingMessageStatuses(fakeDb(tables), 'acc-1', 'wamid.1')
@@ -189,10 +197,21 @@ describe('applyPendingMessageStatuses', () => {
   it('leaves another account’s parked status alone', async () => {
     const tables: Record<string, Row[]> = {
       messages: [message()],
-      pending_message_statuses: [{ account_id: 'acc-2', wamid: 'wamid.1', status: 'read', error_code: null }],
+      pending_message_statuses: [{ account_id: 'acc-2', wamid: 'wamid.1', status: 'read', error_code: null, created_at: new Date().toISOString() }],
     }
     await applyPendingMessageStatuses(fakeDb(tables), 'acc-1', 'wamid.1')
     expect(tables.messages[0].status).toBe('sent')
     expect(tables.pending_message_statuses).toHaveLength(1)
+  })
+
+  it('ignores expired receipts when the scheduler has not run yet', async () => {
+    const tables: Record<string, Row[]> = {
+      messages: [message()],
+      pending_message_statuses: [
+        { account_id: 'acc-1', wamid: 'wamid.1', status: 'read', created_at: '2000-01-01T00:00:00.000Z' },
+      ],
+    }
+    expect(await applyPendingMessageStatuses(fakeDb(tables), 'acc-1', 'wamid.1')).toEqual([])
+    expect(tables.messages[0].status).toBe('sent')
   })
 })
