@@ -151,6 +151,9 @@ export function BroadcastsOverview({
   const [failuresFor, setFailuresFor] = useState<AdminBroadcast | null>(null);
 
   const num = (n: number) => format.number(n);
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const dateTime = (value: string) =>
+    format.dateTime(new Date(value), { dateStyle: 'medium', timeStyle: 'short', timeZone });
 
   return (
     <div className="space-y-4">
@@ -185,6 +188,7 @@ export function BroadcastsOverview({
                     <TableHead className="text-right">{t('colFailed')}</TableHead>
                     <TableHead className="text-right">{t('colCost')}</TableHead>
                     <TableHead>{t('colCreated')}</TableHead>
+                    <TableHead>{t('colScheduledSend')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -223,7 +227,10 @@ export function BroadcastsOverview({
                         {b.estimatedCostPkr === null ? '—' : t('pkr', { amount: num(b.estimatedCostPkr) })}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {format.dateTime(new Date(b.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}
+                        {dateTime(b.createdAt)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        {b.scheduledAt ? dateTime(b.scheduledAt) : '—'}
                       </TableCell>
                     </TableRow>
                   ))}

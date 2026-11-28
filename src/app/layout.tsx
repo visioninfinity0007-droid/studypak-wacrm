@@ -14,6 +14,8 @@ import {
   STORAGE_KEY,
   THEME_IDS,
 } from "@/lib/themes";
+import { SpeedInsights } from '@vercel/speed-insights/next';
+import { isPreviewWithoutSupabase } from "@/lib/supabase/preview";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -114,10 +116,18 @@ export default async function RootLayout({
       <body className="min-h-full bg-background text-foreground font-sans">
         <NextIntlClientProvider messages={messages} locale={locale}>
           <ThemeProvider>
-            {children}
+            {isPreviewWithoutSupabase() ? (
+              <main className="mx-auto max-w-lg px-6 py-20">
+                <h1 className="text-2xl font-semibold">Preview needs a Supabase connection</h1>
+                <p className="mt-3 text-muted-foreground">
+                  Connect a test Supabase project in Vercel to use the CRM on this preview.
+                </p>
+              </main>
+            ) : children}
             <ThemedToaster />
           </ThemeProvider>
         </NextIntlClientProvider>
+        <SpeedInsights />
       </body>
     </html>
   );

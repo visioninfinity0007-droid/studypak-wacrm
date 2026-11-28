@@ -22,11 +22,14 @@ export async function POST(
 
     const { data: account, error } = await admin
       .from("accounts")
-      .select("owner_user_id")
+      .select("owner_user_id, deletion_started_at")
       .eq("id", id)
       .maybeSingle();
     if (error) return NextResponse.json({ error: t("updateFailed") }, { status: 500 });
     if (!account) return NextResponse.json({ error: t("notFound") }, { status: 404 });
+    if (account.deletion_started_at) {
+      return NextResponse.json({ error: t("deletionInProgress") }, { status: 409 });
+    }
     // Platform admins change their own password from Settings → Security.
     if (account.owner_user_id === userId) {
       return NextResponse.json({ error: t("ownPassword") }, { status: 400 });

@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server';
 import { supabaseServiceRole } from '@/lib/supabase/admin';
 import { verifyGithubActionsToken } from '@/lib/github-actions-oidc';
 import { runQueueTick } from '@/lib/whatsapp/broadcast-queue';
+import { pruneExpiredPendingMessageStatuses } from '@/lib/whatsapp/message-status-sync';
 
 export const maxDuration = 120;
 const TICK_BUDGET_MS = 50_000;
@@ -51,7 +52,11 @@ export async function GET(request: Request) {
   if (!ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const results = await runQueueTick(supabaseServiceRole(), Date.now() + TICK_BUDGET_MS);
+    const db = supabaseServiceRole();
+    const [results] = await Promise.all([
+      runQueueTick(db, Date.now() + TICK_BUDGET_MS),
+      pruneExpiredPendingMessageStatuses(db),
+    ]);
     const worked = results.filter((r) => !r.skipped);
     return NextResponse.json({
       broadcasts: results.length,

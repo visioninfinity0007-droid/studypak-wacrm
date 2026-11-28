@@ -47,7 +47,33 @@ beforeEach(() => {
   refreshedCookies = [];
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
+});
+
+describe("middleware — Preview without Supabase settings", () => {
+  it("routes the dashboard to the static setup notice", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", undefined);
+    const res = await middleware(new NextRequest("https://app.test/dashboard?invite=abc"));
+    expect(res.headers.get("x-middleware-rewrite")).toBe("https://app.test/login");
+  });
+
+  it("returns 503 on API routes when a public key is missing", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", undefined);
+    const res = await middleware(new NextRequest("https://app.test/api/whatsapp/send"));
+    expect(res.status).toBe(503);
+  });
+
+  it("retains normal auth routes when Preview has its own credentials", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    const res = await middleware(new NextRequest("https://app.test/dashboard"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://app.test/login");
+  });
+});
 
 const ROTATED = {
   name: "sb-test-auth-token",

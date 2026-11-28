@@ -35,6 +35,7 @@ interface AccountRow {
   owner_user_id: string;
   created_at: string;
   broadcast_rate_pkr?: number | string | null;
+  deletion_started_at?: string | null;
 }
 
 async function countFor(admin: SupabaseClient, table: string, accountId: string): Promise<number> {
@@ -73,6 +74,7 @@ export async function GET() {
           id: a.id,
           name: a.name,
           status: normalizeCollegeStatus(a.status),
+          deletionStarted: Boolean(a.deletion_started_at),
           createdAt: a.created_at,
           ownerEmail: owner?.email ?? null,
           ownerName: owner?.full_name ?? null,

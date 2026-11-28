@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Activity, Building2, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Activity, Building2, KeyRound, Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +40,7 @@ interface College {
   id: string;
   name: string;
   status: CollegeStatus;
+  deletionStarted: boolean;
   createdAt: string;
   ownerEmail: string | null;
   ownerName: string | null;
@@ -70,7 +71,7 @@ export function CollegesAdmin({
   onShowBroadcasts?: (collegeId: string) => void;
   /** Jump to the Activity tab filtered to this college. */
   onShowActivity?: (collegeId: string) => void;
-  /** A college was created — refresh lists that name colleges. */
+  /** A college was created or deleted — refresh lists that name colleges. */
   onChanged?: () => void;
 } = {}) {
   const t = useTranslations('Admin');
@@ -82,6 +83,9 @@ export function CollegesAdmin({
   const [createOpen, setCreateOpen] = useState(false);
   const [login, setLogin] = useState<{ title: string; login: Login } | null>(null);
   const [rateDrafts, setRateDrafts] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<College | null>(null);
+  const [confirmation, setConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,6 +158,34 @@ export function CollegesAdmin({
     [t],
   );
 
+  async function deleteCollege(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!deleteTarget || deleting || confirmation.trim() !== deleteTarget.name.trim()) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/colleges/${deleteTarget.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'StudyPak' },
+        body: JSON.stringify({ confirmation }),
+      });
+      if (!res.ok) {
+        toast.error(await readError(res, t('deleteFailed')));
+        if (res.status === 404) setDeleteTarget(null);
+        return;
+      }
+      const deletedId = deleteTarget.id;
+      setDeleteTarget(null);
+      setColleges((previous) => previous?.filter((college) => college.id !== deletedId) ?? null);
+      toast.success(t('deleted'));
+      onChanged?.();
+    } catch {
+      toast.error(t('networkError'));
+    } finally {
+      await load();
+      setDeleting(false);
+    }
+  }
+
   if (profileLoading) return null;
   if (!isPlatformAdmin) {
     return <p className="text-sm text-muted-foreground">{t('notAllowed')}</p>;
@@ -217,6 +249,9 @@ export function CollegesAdmin({
                         </TableCell>
                         <TableCell>
                           <Badge variant={STATUS_VARIANT[c.status]}>{t(`status.${c.status}`)}</Badge>
+                          {c.deletionStarted && (
+                            <p className="mt-1 text-xs text-muted-foreground">{t('deletionPending')}</p>
+                          )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{c.members}</TableCell>
                         <TableCell className="text-right tabular-nums">{c.contacts}</TableCell>
@@ -249,13 +284,14 @@ export function CollegesAdmin({
                               inputMode="decimal"
                               placeholder={t('ratePlaceholder')}
                               value={draft}
+                              disabled={c.deletionStarted}
                               onChange={(e) => setRateDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
                             />
                             {draft !== savedRate && (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                disabled={busy}
+                                disabled={busy || c.deletionStarted}
                                 onClick={() =>
                                   void patch(c.id, { broadcastRatePkr: draft.trim() }, t('rateSaved'))
                                 }
@@ -283,10 +319,24 @@ export function CollegesAdmin({
                                 {t('suspend')}
                               </Button>
                             )}
-                            {c.status === 'suspended' && (
+                            {c.status === 'suspended' && !c.deletionStarted && (
                               <Button size="sm" variant="outline" disabled={busy}
                                 onClick={() => void patch(c.id, { status: 'active' }, t('reactivated'))}>
                                 {t('reactivate')}
+                              </Button>
+                            )}
+                            {c.status === 'suspended' && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={busy || deleting}
+                                onClick={() => {
+                                  setConfirmation('');
+                                  setDeleteTarget(c);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                {t(c.deletionStarted ? 'retryDeletion' : 'deleteCollege')}
                               </Button>
                             )}
                             {onShowActivity && (
@@ -297,7 +347,7 @@ export function CollegesAdmin({
                                 <Activity className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button size="sm" variant="ghost" disabled={busy}
+                            <Button size="sm" variant="ghost" disabled={busy || c.deletionStarted}
                               aria-label={t('resetPassword')} title={t('resetPassword')}
                               onClick={() => void resetPassword(c)}>
                               <KeyRound className="h-4 w-4" />
@@ -327,6 +377,44 @@ export function CollegesAdmin({
         }}
       />
       <LoginDialog value={login} onClose={() => setLogin(null)} />
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent showCloseButton={!deleting} className="sm:max-w-md">
+          <form className="space-y-4" onSubmit={(event) => void deleteCollege(event)}>
+            <DialogHeader>
+              <DialogTitle>{t('deleteCollegeTitle', { college: deleteTarget?.name ?? '' })}</DialogTitle>
+              <DialogDescription>{t('deleteCollegeDescription')}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="delete-college-name">{t('deleteNameLabel')}</Label>
+              <Input
+                id="delete-college-name"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                disabled={deleting}
+                autoComplete="off"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                {t('cancel')}
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={!deleteTarget || deleting || confirmation.trim() !== deleteTarget.name.trim()}
+              >
+                {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {t('deletePermanently')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

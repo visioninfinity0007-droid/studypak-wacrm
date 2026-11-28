@@ -86,3 +86,6 @@ jobs:
       # contacts that are in another list.
       - name: Verify contact lists
         run: supabase db query --local --file supabase/ci/verify-contact-lists.sql
+
+      - name: Verify suspended college deletion
+        run: supabase db query --local --file supabase/ci/verify-college-deletion.sql
