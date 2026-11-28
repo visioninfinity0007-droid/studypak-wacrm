@@ -1,7 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isPreviewWithoutSupabase } from '@/lib/supabase/preview'
 
 export async function middleware(request: NextRequest) {
+  if (isPreviewWithoutSupabase()) {
+    const { pathname } = request.nextUrl
+    if (pathname.startsWith('/api/') || pathname.startsWith('/auth/')) {
+      return NextResponse.json({ error: 'Preview Supabase settings are missing' }, { status: 503 })
+    }
+    // Use the static login page, where the root layout renders the preview
+    // notice. This also keeps dynamic routes from opening a database client.
+    if (pathname === '/login') return NextResponse.next()
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.search = ''
+    return NextResponse.rewrite(url)
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
