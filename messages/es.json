@@ -3251,6 +3251,7 @@
     "colFailed": "Failed",
     "colCost": "Est. cost",
     "colCreated": "Created",
+    "colScheduledSend": "Envío programado",
     "pkr": "PKR {amount}",
     "costHint": "Estimated cost = messages sent × the college's current PKR rate. Meta bills each college directly.",
     "viewFailures": "Why these messages failed",
